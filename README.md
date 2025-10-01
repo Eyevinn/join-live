@@ -34,17 +34,17 @@ A web application that allows participants to join live broadcasts from their br
 
 ### WHIP Gateway URL
 
-The application defaults to the OSC livevibe service. To use a different WHIP gateway:
+The application defaults to the OSC livevibe service. To use a different WHIP gateway, provide only the base URL (the `/api/v2/whip/sfu-broadcaster` endpoint path is added automatically):
 
 **Option 1: Environment Variable**
 ```bash
-WHIP_GATEWAY_URL=https://your-whip-gateway.com/whip npm start
+WHIP_GATEWAY_URL=https://your-whip-gateway.com npm start
 ```
 
 **Option 2: .env file**
 ```bash
 cp .env.example .env
-# Edit .env and set your WHIP_GATEWAY_URL
+# Edit .env and set your WHIP_GATEWAY_URL (base URL only)
 ```
 
 ### WHIP Authentication
@@ -64,7 +64,7 @@ cp .env.example .env
 
 **Combined Example:**
 ```bash
-WHIP_GATEWAY_URL=https://your-gateway.com/whip WHIP_AUTH_KEY=secret123 npm start
+WHIP_GATEWAY_URL=https://your-gateway.com WHIP_AUTH_KEY=secret123 npm start
 ```
 
 ### Port Configuration
@@ -89,7 +89,7 @@ The application requests camera and microphone access with these settings:
 
 ### WHIP Integration
 
-Uses the Symphony Media Bridge WHIP gateway for ingesting WebRTC streams. The default configuration points to the OSC livevibe service at `https://livevibe.osaas.io/api/v2/whip/sfu-broadcaster`.
+Uses the Symphony Media Bridge WHIP gateway for ingesting WebRTC streams. The default configuration points to the OSC livevibe service. The application automatically appends `/api/v2/whip/sfu-broadcaster` to the base gateway URL.
 
 ## Browser Support
 

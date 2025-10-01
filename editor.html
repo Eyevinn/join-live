@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Broadcast Editor - Stream Mosaic</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: white;
+            overflow: hidden;
+        }
+        
+        .header {
+            background: #333;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            border-bottom: 2px solid #555;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            color: #fff;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #545b62;
+        }
+        
+        .status {
+            font-size: 14px;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        
+        .status.connected {
+            background-color: #28a745;
+        }
+        
+        .status.disconnected {
+            background-color: #dc3545;
+        }
+        
+        .status.loading {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        
+        .main-content {
+            height: calc(100vh - 80px);
+            padding: 20px;
+            overflow: auto;
+        }
+        
+        .mosaic-container {
+            display: grid;
+            gap: 15px;
+            height: 100%;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            grid-auto-rows: minmax(240px, 1fr);
+        }
+        
+        .stream-tile {
+            background: #2a2a2a;
+            border-radius: 8px;
+            border: 2px solid #444;
+            overflow: hidden;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+        
+        .stream-tile:hover {
+            border-color: #007bff;
+            transform: scale(1.02);
+        }
+        
+        .stream-tile.active {
+            border-color: #28a745;
+            box-shadow: 0 0 15px rgba(40, 167, 69, 0.5);
+        }
+        
+        .stream-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000;
+        }
+        
+        .stream-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, transparent 50%);
+            padding: 10px;
+            color: white;
+        }
+        
+        .stream-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .stream-id {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .stream-status {
+            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            background: rgba(0,0,0,0.8);
+        }
+        
+        .stream-status.live {
+            background: #28a745;
+        }
+        
+        .stream-status.error {
+            background: #dc3545;
+        }
+        
+        .stream-loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #444;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .no-streams {
+            grid-column: 1 / -1;
+            text-align: center;
+            padding: 60px 20px;
+            color: #888;
+        }
+        
+        .no-streams h2 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .no-streams p {
+            font-size: 16px;
+        }
+        
+        .error-message {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #dc3545;
+            color: white;
+            padding: 15px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            z-index: 1000;
+            max-width: 400px;
+        }
+        
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 10px;
+                padding: 10px;
+            }
+            
+            .mosaic-container {
+                grid-template-columns: 1fr;
+                padding: 10px;
+            }
+            
+            .main-content {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Live Broadcast Editor</h1>
+        <div class="controls">
+            <div id="connectionStatus" class="status disconnected">Disconnected</div>
+            <button id="refreshBtn" class="btn btn-primary">Refresh Streams</button>
+            <button id="settingsBtn" class="btn btn-secondary">Settings</button>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div id="mosaicContainer" class="mosaic-container">
+            <div class="no-streams">
+                <h2>No Active Streams</h2>
+                <p>Waiting for participants to join the broadcast...</p>
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+    
+    <div id="errorMessage" class="error-message" style="display: none;"></div>
+    
+    <script src="config.js"></script>
+    <script type="module">
+        // Import WebRTCPlayer from CDN and initialize editor after loading
+        async function loadWebRTCPlayer() {
+            const cdnUrls = [
+                'https://cdn.skypack.dev/@eyevinn/webrtc-player',
+                'https://unpkg.com/@eyevinn/webrtc-player/dist/main.js?module'
+            ];
+            
+            for (const url of cdnUrls) {
+                try {
+                    console.log(`Trying to load WebRTCPlayer from: ${url}`);
+                    const module = await import(url);
+                    const WebRTCPlayer = module.WebRTCPlayer || module.default?.WebRTCPlayer;
+                    
+                    if (WebRTCPlayer) {
+                        window.WebRTCPlayer = WebRTCPlayer;
+                        console.log('WebRTCPlayer loaded successfully from:', url);
+                        
+                        // Import and initialize editor after library is loaded
+                        const { initializeEditor } = await import('./editor.js');
+                        initializeEditor();
+                        return;
+                    }
+                } catch (error) {
+                    console.warn(`Failed to load from ${url}:`, error);
+                }
+            }
+            
+            // If all CDN attempts fail, show error
+            console.error('Failed to load WebRTCPlayer from all CDN sources');
+            document.getElementById('errorMessage').textContent = 'Failed to load video player library from CDN';
+            document.getElementById('errorMessage').style.display = 'block';
+        }
+        
+        loadWebRTCPlayer();
+    </script>
+</body>
+</html>
