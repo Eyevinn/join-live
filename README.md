@@ -6,6 +6,31 @@
 
 A comprehensive web application for live broadcasting that enables participants to join live streams via WHIP (WebRTC-HTTP Ingestion Protocol) with a professional editor interface for stream management and OBS Studio integration.
 
+## Screenshots
+
+### Participant Interface
+<div align="center">
+  <img src="screenshots/join-desktop.png" alt="Join Live - Desktop Interface" width="600">
+  <p><em>Desktop participant interface with camera preview and broadcasting controls</em></p>
+</div>
+
+<div align="center">
+  <img src="screenshots/join-mobile.png" alt="Join Live - Mobile Interface" width="300">
+  <p><em>Mobile-responsive participant interface</em></p>
+</div>
+
+### On-Air Status
+<div align="center">
+  <img src="screenshots/participant-onair.png" alt="Participant On-Air Indicator" width="600">
+  <p><em>Real-time on-air indicator when participant is selected in editor</em></p>
+</div>
+
+### Editor Interface
+<div align="center">
+  <img src="screenshots/editor-active-output.png" alt="Live Stream Editor" width="600">
+  <p><em>Professional editor interface with numbered stream mosaic and active output selection</em></p>
+</div>
+
 ## Features
 
 ### 🎥 **Participant Broadcasting**
