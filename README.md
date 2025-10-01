@@ -56,6 +56,24 @@ A comprehensive web application for live broadcasting that enables participants 
 - 🔐 Authentication support
 - 🌍 Environment-based configuration
 
+## 🚀 Try it Now on Open Source Cloud
+
+**Want to try Join Live immediately without any setup?** 
+
+Launch it instantly on Open Source Cloud (OSC) - a platform that provides managed WebRTC infrastructure and open source services:
+
+**👉 [Launch Join Live on OSC](https://app.osaas.io/browse/eyevinn-join-live)**
+
+OSC provides:
+- ✅ **Pre-configured WebRTC gateways** (WHIP/WHEP) - no setup required
+- ✅ **Managed infrastructure** - just click and start broadcasting
+- ✅ **All WebRTC components included** - Symphony Media Bridge, WHIP Bridge, WHEP Gateway
+- ✅ **Instant deployment** - ready to use in seconds
+
+Perfect for testing, demos, or production use without the complexity of setting up WebRTC infrastructure.
+
+---
+
 ## Quick Start
 
 ### Using Docker (Recommended)
@@ -247,6 +265,7 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 - 📖 [Documentation](https://github.com/Eyevinn/join-live#readme)
 - 🐛 [Issue Tracker](https://github.com/Eyevinn/join-live/issues)
 - 💬 [Discussions](https://github.com/Eyevinn/join-live/discussions)
+- 🚀 [Try on Open Source Cloud](https://app.osaas.io/browse/eyevinn-join-live)
 
 ## About Eyevinn Technology
 
