@@ -33,10 +33,15 @@ app.get('/editor', (req, res) => {
     res.sendFile(path.join(__dirname, 'editor.html'));
 });
 
+app.get('/source', (req, res) => {
+    res.sendFile(path.join(__dirname, 'source.html'));
+});
+
 app.listen(port, () => {
     console.log(`Join Live app listening at http://localhost:${port}`);
     console.log(`Participant view: http://localhost:${port}/`);
     console.log(`Editor view: http://localhost:${port}/editor`);
+    console.log(`OBS Browser Source: http://localhost:${port}/source`);
     console.log('');
     console.log(`WHIP Gateway Base: ${WHIP_GATEWAY_BASE}`);
     console.log(`WHIP Full URL: ${WHIP_GATEWAY_URL}`);

@@ -6,6 +6,7 @@ class LiveBroadcastEditor {
         this.players = new Map();
         this.refreshInterval = null;
         this.isConnected = false;
+        this.selectedChannelId = null;
         
         this.mosaicContainer = document.getElementById('mosaicContainer');
         this.connectionStatus = document.getElementById('connectionStatus');
@@ -15,6 +16,7 @@ class LiveBroadcastEditor {
         
         this.loadConfiguration();
         this.initializeEventListeners();
+        this.loadSelectedChannel();
         this.startAutoRefresh();
     }
     
@@ -27,6 +29,11 @@ class LiveBroadcastEditor {
         
         console.log('WHEP Gateway:', this.whepGatewayUrl);
         console.log('WHEP Channel Endpoint:', this.whepChannelEndpoint);
+    }
+    
+    loadSelectedChannel() {
+        this.selectedChannelId = localStorage.getItem('selectedChannelId');
+        console.log('Loaded selected channel:', this.selectedChannelId);
     }
     
     initializeEventListeners() {
@@ -149,6 +156,11 @@ class LiveBroadcastEditor {
         tile.className = 'stream-tile';
         tile.id = `tile-${streamId}`;
         
+        // Check if this is the selected stream
+        if (streamId === this.selectedChannelId) {
+            tile.classList.add('selected');
+        }
+        
         tile.innerHTML = `
             <video id="video-${streamId}" class="stream-video" autoplay playsinline muted></video>
             <div class="stream-overlay">
@@ -156,12 +168,21 @@ class LiveBroadcastEditor {
                     <div class="stream-id">${streamId}</div>
                     <div id="status-${streamId}" class="stream-status">Connecting...</div>
                 </div>
+                <div class="stream-selection">
+                    <div class="selection-indicator">
+                        <span class="selection-text">Click to select for OBS</span>
+                        <span class="selected-text">Selected for OBS</span>
+                    </div>
+                </div>
             </div>
             <div id="loading-${streamId}" class="stream-loading">
                 <div class="spinner"></div>
                 <div>Loading stream...</div>
             </div>
         `;
+        
+        // Add click handler for selection
+        tile.addEventListener('click', () => this.selectStream(streamId));
         
         return tile;
     }
@@ -391,6 +412,27 @@ class LiveBroadcastEditor {
             clearInterval(this.refreshInterval);
             this.refreshInterval = null;
         }
+    }
+    
+    selectStream(streamId) {
+        console.log(`Selecting stream: ${streamId}`);
+        
+        // Update visual selection
+        const previousSelected = document.querySelector('.stream-tile.selected');
+        if (previousSelected) {
+            previousSelected.classList.remove('selected');
+        }
+        
+        const newSelected = document.getElementById(`tile-${streamId}`);
+        if (newSelected) {
+            newSelected.classList.add('selected');
+        }
+        
+        // Update state and localStorage
+        this.selectedChannelId = streamId;
+        localStorage.setItem('selectedChannelId', streamId);
+        
+        console.log(`Stream ${streamId} selected for OBS browser source`);
     }
     
     cleanup() {

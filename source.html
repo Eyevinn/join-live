@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS Browser Source - Live Stream</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: transparent;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        .video-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            background: transparent;
+        }
+        
+        .stream-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: transparent;
+        }
+        
+        .overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+        }
+        
+        .status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 16px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            color: #ff6b6b;
+        }
+        
+        .waiting {
+            color: #74c0fc;
+        }
+    </style>
+</head>
+<body>
+    <div class="video-container">
+        <video id="streamVideo" class="stream-video" autoplay playsinline muted></video>
+        <div id="overlay" class="overlay"></div>
+        <div id="status" class="status waiting">
+            <div class="spinner"></div>
+            <div>Waiting for stream selection...</div>
+        </div>
+    </div>
+    
+    <script src="config.js"></script>
+    <script type="module">
+        class OBSBrowserSource {
+            constructor() {
+                this.currentPlayer = null;
+                this.currentChannelId = null;
+                this.videoElement = document.getElementById('streamVideo');
+                this.overlay = document.getElementById('overlay');
+                this.status = document.getElementById('status');
+                
+                this.loadConfiguration();
+                this.startListening();
+                this.checkForInitialSelection();
+            }
+            
+            loadConfiguration() {
+                this.whepGatewayUrl = window.WHEP_GATEWAY_URL || window.WHIP_GATEWAY_URL || 'https://eyevinnlab-livevibe.eyevinn-wrtc-egress.auto.prod.osaas.io';
+                this.whepAuthKey = window.WHEP_AUTH_KEY || window.WHIP_AUTH_KEY || null;
+                
+                console.log('OBS Source - WHEP Gateway:', this.whepGatewayUrl);
+            }
+            
+            startListening() {
+                // Listen for localStorage changes (when editor selects a stream)
+                window.addEventListener('storage', (e) => {
+                    if (e.key === 'selectedChannelId') {
+                        const channelId = e.newValue;
+                        if (channelId && channelId !== this.currentChannelId) {
+                            this.switchToStream(channelId);
+                        } else if (!channelId) {
+                            this.clearStream();
+                        }
+                    }
+                });
+                
+                // Also check periodically for changes (in case storage event doesn't fire)
+                setInterval(() => {
+                    const channelId = localStorage.getItem('selectedChannelId');
+                    if (channelId !== this.currentChannelId) {
+                        if (channelId) {
+                            this.switchToStream(channelId);
+                        } else {
+                            this.clearStream();
+                        }
+                    }
+                }, 1000);
+            }
+            
+            checkForInitialSelection() {
+                const channelId = localStorage.getItem('selectedChannelId');
+                if (channelId) {
+                    this.switchToStream(channelId);
+                }
+            }
+            
+            async switchToStream(channelId) {
+                console.log(`Switching to stream: ${channelId}`);
+                
+                // Clean up existing player
+                if (this.currentPlayer) {
+                    this.currentPlayer.destroy();
+                    this.currentPlayer = null;
+                }
+                
+                this.currentChannelId = channelId;
+                this.updateOverlay(channelId);
+                this.showStatus('loading', 'Loading stream...');
+                
+                try {
+                    await this.loadStream(channelId);
+                } catch (error) {
+                    console.error('Failed to load stream:', error);
+                    this.showStatus('error', `Failed to load stream: ${error.message}`);
+                }
+            }
+            
+            async loadStream(channelId) {
+                // First, get the stream info from the WHEP channel endpoint
+                const streamInfo = await this.getStreamInfo(channelId);
+                
+                if (!streamInfo) {
+                    throw new Error('Stream not found');
+                }
+                
+                // Construct WHEP playback URL
+                let whepPlaybackUrl;
+                if (streamInfo.resource) {
+                    whepPlaybackUrl = `${this.whepGatewayUrl}${streamInfo.resource}`;
+                } else {
+                    whepPlaybackUrl = `${this.whepGatewayUrl}/whep/${channelId}`;
+                }
+                
+                console.log(`Loading stream from: ${whepPlaybackUrl}`);
+                
+                // Load WebRTCPlayer from CDN
+                if (!window.WebRTCPlayer) {
+                    await this.loadWebRTCPlayer();
+                }
+                
+                // Create new player
+                this.currentPlayer = new window.WebRTCPlayer({
+                    video: this.videoElement,
+                    type: 'whep'
+                });
+                
+                // Handle player events
+                this.currentPlayer.on('connecting', () => {
+                    console.log('Stream connecting...');
+                    this.showStatus('loading', 'Connecting to stream...');
+                });
+                
+                this.currentPlayer.on('connected', () => {
+                    console.log('Stream connected');
+                    this.hideStatus();
+                    this.overlay.style.display = 'block';
+                });
+                
+                this.currentPlayer.on('error', (error) => {
+                    console.error('Stream error:', error);
+                    this.showStatus('error', 'Stream error');
+                });
+                
+                this.currentPlayer.on('disconnected', () => {
+                    console.log('Stream disconnected');
+                    this.showStatus('error', 'Stream disconnected');
+                });
+                
+                // Also listen to video element events as fallback
+                this.videoElement.addEventListener('canplay', () => {
+                    console.log('Video can play');
+                    this.hideStatus();
+                    this.overlay.style.display = 'block';
+                });
+                
+                this.videoElement.addEventListener('playing', () => {
+                    console.log('Video playing');
+                    this.hideStatus();
+                    this.overlay.style.display = 'block';
+                });
+                
+                this.videoElement.addEventListener('error', (error) => {
+                    console.error('Video error:', error);
+                    this.showStatus('error', 'Video error');
+                });
+                
+                // Start playback
+                await this.currentPlayer.load(new URL(whepPlaybackUrl));
+            }
+            
+            async getStreamInfo(channelId) {
+                const whepChannelEndpoint = this.whepGatewayUrl + '/whep/channel';
+                
+                const headers = {};
+                if (this.whepAuthKey) {
+                    headers['Authorization'] = `Bearer ${this.whepAuthKey}`;
+                }
+                
+                try {
+                    const response = await fetch(whepChannelEndpoint, {
+                        method: 'GET',
+                        headers: headers
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    
+                    // Handle different response formats and find the specific channel
+                    let streams = [];
+                    if (Array.isArray(data)) {
+                        streams = data;
+                    } else if (data.streams && Array.isArray(data.streams)) {
+                        streams = data.streams;
+                    } else if (data.channels && Array.isArray(data.channels)) {
+                        streams = data.channels;
+                    }
+                    
+                    // Find the stream with matching channelId
+                    return streams.find(stream => 
+                        (stream.channelId || stream.id || stream.streamId || stream.channel) === channelId
+                    );
+                    
+                } catch (error) {
+                    console.error('Failed to get stream info:', error);
+                    return null;
+                }
+            }
+            
+            async loadWebRTCPlayer() {
+                const cdnUrls = [
+                    'https://cdn.skypack.dev/@eyevinn/webrtc-player',
+                    'https://unpkg.com/@eyevinn/webrtc-player/dist/main.js?module'
+                ];
+                
+                for (const url of cdnUrls) {
+                    try {
+                        console.log(`Loading WebRTCPlayer from: ${url}`);
+                        const module = await import(url);
+                        const WebRTCPlayer = module.WebRTCPlayer || module.default?.WebRTCPlayer;
+                        
+                        if (WebRTCPlayer) {
+                            window.WebRTCPlayer = WebRTCPlayer;
+                            console.log('WebRTCPlayer loaded successfully');
+                            return;
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to load from ${url}:`, error);
+                    }
+                }
+                
+                throw new Error('Failed to load WebRTCPlayer from CDN');
+            }
+            
+            clearStream() {
+                console.log('Clearing stream');
+                
+                if (this.currentPlayer) {
+                    this.currentPlayer.destroy();
+                    this.currentPlayer = null;
+                }
+                
+                this.currentChannelId = null;
+                this.overlay.style.display = 'none';
+                this.showStatus('waiting', 'Waiting for stream selection...');
+            }
+            
+            updateOverlay(channelId) {
+                this.overlay.textContent = `Live: ${channelId}`;
+            }
+            
+            showStatus(type, message) {
+                this.status.className = `status ${type}`;
+                this.status.innerHTML = type === 'loading' ? 
+                    `<div class="spinner"></div><div>${message}</div>` : 
+                    `<div>${message}</div>`;
+                this.status.style.display = 'block';
+            }
+            
+            hideStatus() {
+                this.status.style.display = 'none';
+            }
+            
+            cleanup() {
+                if (this.currentPlayer) {
+                    this.currentPlayer.destroy();
+                }
+            }
+        }
+        
+        // Initialize when page loads
+        let browserSource;
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                browserSource = new OBSBrowserSource();
+            });
+        } else {
+            browserSource = new OBSBrowserSource();
+        }
+        
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (browserSource) {
+                browserSource.cleanup();
+            }
+        });
+    </script>
+</body>
+</html>
