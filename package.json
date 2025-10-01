@@ -10,7 +10,8 @@
   "dependencies": {
     "@eyevinn/webrtc-player": "^0.13.0",
     "@eyevinn/whip-web-client": "^0.4.0",
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "ws": "^8.18.3"
   },
   "keywords": [
     "whip",

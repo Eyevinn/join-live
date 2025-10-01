@@ -110,6 +110,53 @@
         .hidden {
             display: none;
         }
+        
+        .on-air-indicator {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            display: none;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #fff;
+            background: #dc3545;
+            padding: 6px 12px;
+            border-radius: 12px;
+            box-shadow: 0 0 15px rgba(220, 53, 69, 0.6);
+            animation: onAirPulse 2s ease-in-out infinite;
+            z-index: 10;
+        }
+        
+        .on-air-dot {
+            width: 8px;
+            height: 8px;
+            background: #fff;
+            border-radius: 50%;
+            animation: onAirBlink 1s ease-in-out infinite alternate;
+        }
+        
+        .on-air-text {
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+        
+        @keyframes onAirPulse {
+            0%, 100% { 
+                box-shadow: 0 0 15px rgba(220, 53, 69, 0.6);
+                transform: scale(1);
+            }
+            50% { 
+                box-shadow: 0 0 25px rgba(220, 53, 69, 0.9);
+                transform: scale(1.05);
+            }
+        }
+        
+        @keyframes onAirBlink {
+            0% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
     </style>
 </head>
 <body>
@@ -118,6 +165,10 @@
         
         <div class="video-container">
             <video id="localVideo" autoplay muted playsinline></video>
+            <div id="onAirIndicator" class="on-air-indicator">
+                <div class="on-air-dot"></div>
+                <span class="on-air-text">ON AIR</span>
+            </div>
         </div>
         
         <div class="controls">

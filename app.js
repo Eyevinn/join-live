@@ -5,15 +5,18 @@ class JoinLiveApp {
         this.localStream = null;
         this.whipClient = null;
         this.isStreaming = false;
+        this.channelId = null;
         
         this.localVideo = document.getElementById('localVideo');
         this.startCameraBtn = document.getElementById('startCameraBtn');
         this.joinLiveBtn = document.getElementById('joinLiveBtn');
         this.stopStreamBtn = document.getElementById('stopStreamBtn');
         this.statusDiv = document.getElementById('status');
+        this.onAirIndicator = document.getElementById('onAirIndicator');
         
         this.initializeEventListeners();
         this.loadConfiguration();
+        this.initializeWebSocket();
     }
     
     loadConfiguration() {
@@ -73,7 +76,23 @@ class JoinLiveApp {
                 }
             });
             
-            await this.whipClient.ingest(this.localStream);
+            const response = await this.whipClient.ingest(this.localStream);
+            
+            // Extract channel ID using getResourceUrl() method
+            try {
+                const resourceUrl = await this.whipClient.getResourceUrl();
+                
+                if (resourceUrl) {
+                    // Extract channel ID from the end of the URL path
+                    const match = resourceUrl.match(/\/([^\/]+)$/);
+                    if (match) {
+                        this.channelId = match[1];
+                        console.log('Channel ID:', this.channelId);
+                    }
+                }
+            } catch (error) {
+                console.error('Error extracting channel ID:', error);
+            }
             
             this.isStreaming = true;
             this.joinLiveBtn.classList.add('hidden');
@@ -98,6 +117,7 @@ class JoinLiveApp {
             }
             
             this.isStreaming = false;
+            this.channelId = null;
             this.stopStreamBtn.classList.add('hidden');
             this.joinLiveBtn.classList.remove('hidden');
             this.joinLiveBtn.disabled = false;
@@ -110,6 +130,56 @@ class JoinLiveApp {
         }
     }
     
+    initializeWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        
+        this.ws = new WebSocket(wsUrl);
+        
+        this.ws.onopen = () => {
+            console.log('WebSocket connected');
+        };
+        
+        this.ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                switch (data.type) {
+                    case 'channelSelected':
+                        this.updateOnAirStatus(data.channelId);
+                        break;
+                        
+                    case 'channelDeselected':
+                        this.updateOnAirStatus(null);
+                        break;
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+        
+        this.ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            // Attempt to reconnect after 3 seconds
+            setTimeout(() => {
+                this.initializeWebSocket();
+            }, 3000);
+        };
+        
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+    }
+    
+    updateOnAirStatus(selectedChannelId) {
+        const isOnAir = this.channelId && selectedChannelId === this.channelId;
+        
+        if (isOnAir) {
+            this.onAirIndicator.style.display = 'flex';
+        } else {
+            this.onAirIndicator.style.display = 'none';
+        }
+    }
     
     showStatus(message, type = 'info') {
         this.statusDiv.textContent = message;
@@ -131,6 +201,9 @@ class JoinLiveApp {
         }
         if (this.whipClient) {
             this.whipClient.destroy();
+        }
+        if (this.ws) {
+            this.ws.close();
         }
     }
 }

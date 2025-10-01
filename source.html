@@ -79,12 +79,39 @@
         .waiting {
             color: #74c0fc;
         }
+        
+        .unmute-prompt {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+        }
+        
+        .unmute-btn {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: 2px solid #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .unmute-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.05);
+        }
     </style>
 </head>
 <body>
     <div class="video-container">
-        <video id="streamVideo" class="stream-video" autoplay playsinline muted></video>
+        <video id="streamVideo" class="stream-video" autoplay playsinline></video>
         <div id="overlay" class="overlay"></div>
+        <div id="unmutePrompt" class="unmute-prompt" style="display: none;">
+            <button id="unmuteBtn" class="unmute-btn">🔊 Click to Enable Audio</button>
+        </div>
         <div id="status" class="status waiting">
             <div class="spinner"></div>
             <div>Waiting for stream selection...</div>
@@ -100,10 +127,13 @@
                 this.videoElement = document.getElementById('streamVideo');
                 this.overlay = document.getElementById('overlay');
                 this.status = document.getElementById('status');
+                this.unmutePrompt = document.getElementById('unmutePrompt');
+                this.unmuteBtn = document.getElementById('unmuteBtn');
+                this.isAudioEnabled = false;
                 
                 this.loadConfiguration();
-                this.startListening();
-                this.checkForInitialSelection();
+                this.initializeWebSocket();
+                this.initializeAudioControl();
             }
             
             loadConfiguration() {
@@ -113,37 +143,47 @@
                 console.log('OBS Source - WHEP Gateway:', this.whepGatewayUrl);
             }
             
-            startListening() {
-                // Listen for localStorage changes (when editor selects a stream)
-                window.addEventListener('storage', (e) => {
-                    if (e.key === 'selectedChannelId') {
-                        const channelId = e.newValue;
-                        if (channelId && channelId !== this.currentChannelId) {
-                            this.switchToStream(channelId);
-                        } else if (!channelId) {
-                            this.clearStream();
-                        }
-                    }
-                });
+            initializeWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
                 
-                // Also check periodically for changes (in case storage event doesn't fire)
-                setInterval(() => {
-                    const channelId = localStorage.getItem('selectedChannelId');
-                    if (channelId !== this.currentChannelId) {
-                        if (channelId) {
-                            this.switchToStream(channelId);
-                        } else {
-                            this.clearStream();
+                this.ws = new WebSocket(wsUrl);
+                
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                };
+                
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        
+                        switch (data.type) {
+                            case 'channelSelected':
+                                if (data.channelId && data.channelId !== this.currentChannelId) {
+                                    this.switchToStream(data.channelId);
+                                }
+                                break;
+                                
+                            case 'channelDeselected':
+                                this.clearStream();
+                                break;
                         }
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
                     }
-                }, 1000);
-            }
-            
-            checkForInitialSelection() {
-                const channelId = localStorage.getItem('selectedChannelId');
-                if (channelId) {
-                    this.switchToStream(channelId);
-                }
+                };
+                
+                this.ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    // Attempt to reconnect after 3 seconds
+                    setTimeout(() => {
+                        this.initializeWebSocket();
+                    }, 3000);
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
             }
             
             async switchToStream(channelId) {
@@ -333,6 +373,47 @@
             
             hideStatus() {
                 this.status.style.display = 'none';
+            }
+            
+            initializeAudioControl() {
+                // Start with video muted to allow autoplay
+                this.videoElement.muted = true;
+                
+                this.unmuteBtn.addEventListener('click', () => {
+                    this.enableAudio();
+                });
+                
+                this.videoElement.addEventListener('canplay', () => {
+                    if (!this.isAudioEnabled) {
+                        this.showUnmutePrompt();
+                    }
+                });
+                
+                this.videoElement.addEventListener('playing', () => {
+                    if (!this.isAudioEnabled) {
+                        this.showUnmutePrompt();
+                    }
+                });
+            }
+            
+            enableAudio() {
+                this.videoElement.muted = false;
+                this.isAudioEnabled = true;
+                this.hideUnmutePrompt();
+                
+                if (this.videoElement.paused) {
+                    this.videoElement.play().catch(error => {
+                        console.error('Error playing video after unmute:', error);
+                    });
+                }
+            }
+            
+            showUnmutePrompt() {
+                this.unmutePrompt.style.display = 'flex';
+            }
+            
+            hideUnmutePrompt() {
+                this.unmutePrompt.style.display = 'none';
             }
             
             cleanup() {

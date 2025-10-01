@@ -7,15 +7,31 @@ class LiveBroadcastEditor {
         this.refreshInterval = null;
         this.isConnected = false;
         this.selectedChannelId = null;
+        this.allStreams = [];
+        this.currentPage = 0;
+        this.gridColumns = 4;
+        this.gridRows = 3;
+        this.streamsPerPage = this.gridColumns * this.gridRows;
+        this.streamToNumberMap = new Map(); // Maps streamId to its display number
         
         this.mosaicContainer = document.getElementById('mosaicContainer');
         this.connectionStatus = document.getElementById('connectionStatus');
         this.refreshBtn = document.getElementById('refreshBtn');
+        this.sourceBtn = document.getElementById('sourceBtn');
         this.settingsBtn = document.getElementById('settingsBtn');
         this.errorMessage = document.getElementById('errorMessage');
+        this.prevPageBtn = document.getElementById('prevPageBtn');
+        this.nextPageBtn = document.getElementById('nextPageBtn');
+        this.pageInfo = document.getElementById('pageInfo');
+        this.settingsModal = document.getElementById('settingsModal');
+        this.closeModalBtn = document.getElementById('closeModalBtn');
+        this.gridColumnsInput = document.getElementById('gridColumns');
+        this.gridRowsInput = document.getElementById('gridRows');
+        this.applyGridBtn = document.getElementById('applyGridBtn');
         
         this.loadConfiguration();
         this.initializeEventListeners();
+        this.initializeWebSocket();
         this.loadSelectedChannel();
         this.startAutoRefresh();
     }
@@ -38,10 +54,32 @@ class LiveBroadcastEditor {
     
     initializeEventListeners() {
         this.refreshBtn.addEventListener('click', () => this.refreshStreams());
+        this.sourceBtn.addEventListener('click', () => this.openSource());
         this.settingsBtn.addEventListener('click', () => this.showSettings());
+        this.prevPageBtn.addEventListener('click', () => this.previousPage());
+        this.nextPageBtn.addEventListener('click', () => this.nextPage());
+        this.closeModalBtn.addEventListener('click', () => this.hideSettings());
+        this.applyGridBtn.addEventListener('click', () => this.applyGridSettings());
         
-        // Handle window resize for responsive grid
-        window.addEventListener('resize', () => this.adjustMosaicLayout());
+        // Close modal when clicking outside
+        this.settingsModal.addEventListener('click', (e) => {
+            if (e.target === this.settingsModal) {
+                this.hideSettings();
+            }
+        });
+        
+        // Close modal with Escape key and handle number key shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && this.settingsModal.style.display === 'block') {
+                this.hideSettings();
+                return;
+            }
+            
+            // Handle number key shortcuts (1-9, 0)
+            if (!this.settingsModal.style.display || this.settingsModal.style.display === 'none') {
+                this.handleKeyboardShortcut(e);
+            }
+        });
     }
     
     async refreshStreams() {
@@ -97,33 +135,91 @@ class LiveBroadcastEditor {
     }
     
     async updateStreamMosaic(streams) {
-        // Remove streams that are no longer available
-        const activeStreamIds = new Set(streams.map(stream => stream.channelId || stream.id || stream.streamId || stream.channel || stream.resource || 'unknown_stream'));
-        
-        for (const [streamId, player] of this.players) {
-            if (!activeStreamIds.has(streamId)) {
-                this.removeStream(streamId);
-            }
-        }
+        // Store all streams for pagination
+        this.allStreams = streams;
         
         // Clear mosaic if no streams
         if (streams.length === 0) {
             this.showNoStreamsMessage();
+            this.updatePagination();
             return;
         }
         
         this.hideNoStreamsMessage();
         
-        // Add or update streams
-        for (const stream of streams) {
-            const streamId = stream.channelId || stream.id || stream.streamId || stream.channel || stream.resource || 'unknown_stream';
-            await this.addOrUpdateStream(streamId, stream);
+        // Clean up existing players
+        for (const [streamId, player] of this.players) {
+            player.destroy();
         }
+        this.players.clear();
+        this.mosaicContainer.innerHTML = '';
         
-        this.adjustMosaicLayout();
+        // Display current page
+        await this.displayCurrentPage();
+        this.updatePagination();
     }
     
-    async addOrUpdateStream(streamId, streamData) {
+    async displayCurrentPage() {
+        const startIndex = this.currentPage * this.streamsPerPage;
+        const endIndex = Math.min(startIndex + this.streamsPerPage, this.allStreams.length);
+        const currentPageStreams = this.allStreams.slice(startIndex, endIndex);
+        
+        // Clear stream-to-number mapping for current page
+        this.streamToNumberMap.clear();
+        
+        // Add streams for current page with numbers
+        for (let i = 0; i < currentPageStreams.length; i++) {
+            const streamData = currentPageStreams[i];
+            const streamId = streamData.channelId || streamData.id || streamData.streamId || streamData.channel;
+            if (streamId) {
+                // Assign number: 1-9, then 0 for 10th stream
+                const streamNumber = i < 9 ? (i + 1).toString() : (i === 9 ? '0' : (i + 1).toString());
+                this.streamToNumberMap.set(streamId, streamNumber);
+                await this.addOrUpdateStream(streamId, streamData, streamNumber);
+            }
+        }
+    }
+    
+    updatePagination() {
+        const totalPages = Math.ceil(this.allStreams.length / this.streamsPerPage);
+        
+        // Update page info
+        this.pageInfo.textContent = `Page ${this.currentPage + 1} of ${Math.max(1, totalPages)}`;
+        
+        // Update button states
+        this.prevPageBtn.disabled = this.currentPage === 0;
+        this.nextPageBtn.disabled = this.currentPage >= totalPages - 1 || totalPages === 0;
+    }
+    
+    previousPage() {
+        if (this.currentPage > 0) {
+            this.currentPage--;
+            this.refreshCurrentPage();
+        }
+    }
+    
+    nextPage() {
+        const totalPages = Math.ceil(this.allStreams.length / this.streamsPerPage);
+        if (this.currentPage < totalPages - 1) {
+            this.currentPage++;
+            this.refreshCurrentPage();
+        }
+    }
+    
+    async refreshCurrentPage() {
+        // Clean up existing players
+        for (const [streamId, player] of this.players) {
+            player.destroy();
+        }
+        this.players.clear();
+        this.mosaicContainer.innerHTML = '';
+        
+        // Display current page
+        await this.displayCurrentPage();
+        this.updatePagination();
+    }
+    
+    async addOrUpdateStream(streamId, streamData, streamNumber) {
         if (this.players.has(streamId)) {
             // Stream already exists, just update info
             this.updateStreamInfo(streamId, streamData);
@@ -138,7 +234,7 @@ class LiveBroadcastEditor {
         }
         
         // Create new stream tile
-        const streamTile = this.createStreamTile(streamId, streamData);
+        const streamTile = this.createStreamTile(streamId, streamData, streamNumber);
         this.mosaicContainer.appendChild(streamTile);
         
         // Initialize WHEP player
@@ -151,7 +247,7 @@ class LiveBroadcastEditor {
         }
     }
     
-    createStreamTile(streamId, streamData) {
+    createStreamTile(streamId, streamData, streamNumber) {
         const tile = document.createElement('div');
         tile.className = 'stream-tile';
         tile.id = `tile-${streamId}`;
@@ -163,6 +259,7 @@ class LiveBroadcastEditor {
         
         tile.innerHTML = `
             <video id="video-${streamId}" class="stream-video" autoplay playsinline muted></video>
+            <div class="stream-number">${streamNumber}</div>
             <div class="stream-overlay">
                 <div class="stream-info">
                     <div class="stream-id">${streamId}</div>
@@ -170,8 +267,11 @@ class LiveBroadcastEditor {
                 </div>
                 <div class="stream-selection">
                     <div class="selection-indicator">
-                        <span class="selection-text">Click to select for OBS</span>
-                        <span class="selected-text">Selected for OBS</span>
+                        <span class="selection-text">Press ${streamNumber} or click to put on air</span>
+                        <span class="on-air-indicator">
+                            <span class="on-air-dot"></span>
+                            <span class="on-air-text">ON AIR</span>
+                        </span>
                     </div>
                 </div>
             </div>
@@ -350,21 +450,6 @@ class LiveBroadcastEditor {
         }
     }
     
-    adjustMosaicLayout() {
-        const streamCount = this.players.size;
-        const container = this.mosaicContainer;
-        
-        if (streamCount === 0) return;
-        
-        // Adjust grid based on number of streams
-        let columns;
-        if (streamCount === 1) columns = 1;
-        else if (streamCount <= 4) columns = 2;
-        else if (streamCount <= 9) columns = 3;
-        else columns = 4;
-        
-        container.style.gridTemplateColumns = `repeat(${columns}, 1fr)`;
-    }
     
     showError(message) {
         this.errorMessage.textContent = message;
@@ -379,32 +464,57 @@ class LiveBroadcastEditor {
         this.errorMessage.style.display = 'none';
     }
     
+    openSource() {
+        const sourceUrl = '/source';
+        window.open(sourceUrl, '_blank');
+    }
+    
     showSettings() {
-        const settings = {
-            'WHEP Gateway': this.whepGatewayUrl,
-            'WHEP Channel Endpoint': this.whepChannelEndpoint,
-            'Auth Key': this.whepAuthKey ? '[SET]' : '[NOT SET]',
-            'Active Streams': this.players.size
-        };
+        // Update settings values
+        document.getElementById('whepGatewayValue').textContent = this.whepGatewayUrl;
+        document.getElementById('whepChannelValue').textContent = this.whepChannelEndpoint;
+        document.getElementById('authKeyValue').textContent = this.whepAuthKey ? '[SET]' : '[NOT SET]';
+        document.getElementById('activeStreamsValue').textContent = this.players.size;
         
-        let message = 'Editor Configuration:\n\n';
-        for (const [key, value] of Object.entries(settings)) {
-            message += `${key}: ${value}\n`;
+        // Update grid inputs
+        this.gridColumnsInput.value = this.gridColumns;
+        this.gridRowsInput.value = this.gridRows;
+        
+        // Show modal
+        this.settingsModal.style.display = 'block';
+    }
+    
+    hideSettings() {
+        this.settingsModal.style.display = 'none';
+    }
+    
+    applyGridSettings() {
+        const columns = parseInt(this.gridColumnsInput.value);
+        const rows = parseInt(this.gridRowsInput.value);
+        
+        if (columns < 1 || columns > 12 || rows < 1 || rows > 8) {
+            alert('Invalid grid dimensions. Columns must be 1-12, rows must be 1-8.');
+            return;
         }
         
-        alert(message);
+        this.gridColumns = columns;
+        this.gridRows = rows;
+        this.streamsPerPage = this.gridColumns * this.gridRows;
+        
+        // Update CSS grid
+        this.mosaicContainer.style.gridTemplateColumns = `repeat(${this.gridColumns}, 1fr)`;
+        this.mosaicContainer.style.gridTemplateRows = `repeat(${this.gridRows}, 1fr)`;
+        
+        // Reset to first page and refresh display
+        this.currentPage = 0;
+        this.refreshCurrentPage();
+        
+        console.log(`Grid updated to ${this.gridColumns}x${this.gridRows} (${this.streamsPerPage} streams per page)`);
     }
     
     startAutoRefresh() {
-        // Initial load
+        // Initial load only
         this.refreshStreams();
-        
-        // Auto-refresh every 10 seconds
-        this.refreshInterval = setInterval(() => {
-            if (!document.hidden) { // Only refresh when tab is visible
-                this.refreshStreams();
-            }
-        }, 10000);
     }
     
     stopAutoRefresh() {
@@ -414,8 +524,53 @@ class LiveBroadcastEditor {
         }
     }
     
+    handleKeyboardShortcut(event) {
+        // Only handle number keys (1-9, 0)
+        const key = event.key;
+        if (!/^[0-9]$/.test(key)) {
+            return;
+        }
+        
+        // Prevent default browser behavior
+        event.preventDefault();
+        
+        // Find the stream that corresponds to this number
+        let targetStreamId = null;
+        for (const [streamId, streamNumber] of this.streamToNumberMap) {
+            if (streamNumber === key) {
+                targetStreamId = streamId;
+                break;
+            }
+        }
+        
+        if (targetStreamId) {
+            console.log(`Keyboard shortcut: Selecting stream ${targetStreamId} with key ${key}`);
+            this.selectStream(targetStreamId);
+        } else {
+            console.log(`No stream found for key ${key}`);
+        }
+    }
+    
     selectStream(streamId) {
         console.log(`Selecting stream: ${streamId}`);
+        
+        // Check if this stream is already selected
+        if (this.selectedChannelId === streamId) {
+            // Deselect - take off air
+            console.log(`Taking stream ${streamId} OFF AIR`);
+            
+            const currentSelected = document.querySelector('.stream-tile.selected');
+            if (currentSelected) {
+                currentSelected.classList.remove('selected');
+            }
+            
+            this.selectedChannelId = null;
+            this.sendWebSocketMessage({
+                type: 'deselectChannel'
+            });
+            
+            return;
+        }
         
         // Update visual selection
         const previousSelected = document.querySelector('.stream-tile.selected');
@@ -428,15 +583,88 @@ class LiveBroadcastEditor {
             newSelected.classList.add('selected');
         }
         
-        // Update state and localStorage
+        // Update state and send WebSocket message
         this.selectedChannelId = streamId;
-        localStorage.setItem('selectedChannelId', streamId);
+        this.sendWebSocketMessage({
+            type: 'selectChannel',
+            channelId: streamId
+        });
         
-        console.log(`Stream ${streamId} selected for OBS browser source`);
+        console.log(`Stream ${streamId} is now ON AIR`);
+    }
+    
+    initializeWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        
+        this.ws = new WebSocket(wsUrl);
+        
+        this.ws.onopen = () => {
+            console.log('WebSocket connected');
+        };
+        
+        this.ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                
+                switch (data.type) {
+                    case 'channelSelected':
+                        this.selectedChannelId = data.channelId;
+                        this.updateStreamTiles();
+                        break;
+                        
+                    case 'channelDeselected':
+                        this.selectedChannelId = null;
+                        this.updateStreamTiles();
+                        break;
+                }
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+        
+        this.ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            // Attempt to reconnect after 3 seconds
+            setTimeout(() => {
+                this.initializeWebSocket();
+            }, 3000);
+        };
+        
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+    }
+    
+    sendWebSocketMessage(message) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(message));
+        } else {
+            console.warn('WebSocket not connected, message not sent:', message);
+        }
+    }
+    
+    updateStreamTiles() {
+        // Update visual selection of all stream tiles based on selectedChannelId
+        const allTiles = document.querySelectorAll('.stream-tile');
+        
+        allTiles.forEach(tile => {
+            const streamId = tile.id.replace('tile-', '');
+            if (streamId === this.selectedChannelId) {
+                tile.classList.add('selected');
+            } else {
+                tile.classList.remove('selected');
+            }
+        });
     }
     
     cleanup() {
         this.stopAutoRefresh();
+        
+        // Close WebSocket connection
+        if (this.ws) {
+            this.ws.close();
+        }
         
         // Cleanup all players
         for (const [streamId, player] of this.players) {
@@ -451,10 +679,9 @@ class LiveBroadcastEditor {
 document.addEventListener('visibilitychange', () => {
     if (window.editor) {
         if (document.hidden) {
-            console.log('Page hidden, pausing auto-refresh');
+            console.log('Page hidden');
         } else {
-            console.log('Page visible, resuming auto-refresh');
-            window.editor.refreshStreams();
+            console.log('Page visible');
         }
     }
 });
