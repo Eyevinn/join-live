@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Live - Participant View</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto 30px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        
+        #localVideo {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        
+        .btn-primary:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .btn-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background-color: #c82333;
+        }
+        
+        .status {
+            text-align: center;
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: bold;
+        }
+        
+        .status.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .status.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Join Live Broadcast</h1>
+        
+        <div class="video-container">
+            <video id="localVideo" autoplay muted playsinline></video>
+        </div>
+        
+        <div class="controls">
+            <button id="startCameraBtn" class="btn btn-primary">Start Camera</button>
+            <button id="joinLiveBtn" class="btn btn-primary hidden" disabled>Join Live</button>
+            <button id="stopStreamBtn" class="btn btn-danger hidden">Stop Streaming</button>
+        </div>
+        
+        <div id="status" class="status hidden"></div>
+    </div>
+    
+    <script src="config.js"></script>
+    <script type="module" src="app.js"></script>
+</body>
+</html>
