@@ -5,7 +5,13 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "docker:build": "docker build -t join-live .",
+    "docker:run": "docker run -p 3000:3000 join-live",
+    "docker:run-dev": "docker run -p 3000:3000 -e NODE_ENV=development join-live",
+    "docker:compose": "docker-compose up",
+    "docker:compose-build": "docker-compose up --build",
+    "docker:compose-down": "docker-compose down"
   },
   "dependencies": {
     "@eyevinn/webrtc-player": "^0.13.0",
@@ -15,10 +21,23 @@
   },
   "keywords": [
     "whip",
+    "whep",
     "webrtc",
     "live",
-    "broadcast"
+    "broadcast",
+    "streaming",
+    "obs",
+    "editor",
+    "mosaic"
   ],
-  "author": "",
-  "license": "MIT"
+  "author": "Eyevinn Technology AB",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Eyevinn/join-live.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Eyevinn/join-live/issues"
+  },
+  "homepage": "https://github.com/Eyevinn/join-live#readme"
 }
