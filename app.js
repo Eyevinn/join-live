@@ -106,6 +106,9 @@ class JoinLiveApp {
                     if (match) {
                         this.channelId = match[1];
                         console.log('Channel ID:', this.channelId);
+                        
+                        // Notify server that participant joined
+                        await this.notifyParticipantJoined();
                     }
                 }
             } catch (error) {
@@ -128,6 +131,11 @@ class JoinLiveApp {
     async stopStreaming() {
         try {
             this.showStatus('Stopping broadcast...', 'info');
+            
+            // Notify server that participant is leaving
+            if (this.channelId) {
+                await this.notifyParticipantLeft();
+            }
             
             if (this.whipClient) {
                 await this.whipClient.destroy();
@@ -237,6 +245,50 @@ class JoinLiveApp {
         this.countdownNotification.classList.add('hidden');
     }
     
+    async notifyParticipantJoined() {
+        if (!this.channelId) return;
+        
+        try {
+            const response = await fetch('/api/participant/join', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    channelId: this.channelId
+                })
+            });
+            
+            if (!response.ok) {
+                console.error('Failed to notify participant joined:', response.statusText);
+            }
+        } catch (error) {
+            console.error('Error notifying participant joined:', error);
+        }
+    }
+    
+    async notifyParticipantLeft() {
+        if (!this.channelId) return;
+        
+        try {
+            const response = await fetch('/api/participant/leave', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    channelId: this.channelId
+                })
+            });
+            
+            if (!response.ok) {
+                console.error('Failed to notify participant left:', response.statusText);
+            }
+        } catch (error) {
+            console.error('Error notifying participant left:', error);
+        }
+    }
+    
     showStatus(message, type = 'info') {
         this.statusDiv.textContent = message;
         this.statusDiv.className = `status ${type}`;
@@ -251,7 +303,12 @@ class JoinLiveApp {
         }
     }
     
-    cleanup() {
+    async cleanup() {
+        // Notify server that participant is leaving
+        if (this.channelId) {
+            await this.notifyParticipantLeft();
+        }
+        
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => track.stop());
         }
