@@ -748,7 +748,8 @@ class LiveBroadcastEditor {
                         
                     case 'participantJoined':
                         console.log(`Participant joined: ${data.channelId}`);
-                        this.refreshStreams();
+                        // Delay refresh to allow stream establishment at gateway
+                        setTimeout(() => this.refreshStreams(), 2000);
                         break;
                         
                     case 'participantLeft':
