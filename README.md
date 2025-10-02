@@ -46,9 +46,11 @@ A comprehensive web application for live broadcasting that enables participants 
 - 📊 Live stream monitoring and management
 
 ### 🎮 **OBS Studio Integration**
-- 🌐 Browser source for seamless integration
+- 🖥️ **Window Capture**: Capture editor interface directly for complete control visibility
+- 🌐 **Browser Source**: Clean video output (`/source`) and QR code display (`/qr`)
 - 🔄 Automatic stream switching based on editor selection
 - 📡 Real-time updates via WebSocket
+- 📱 QR code display for easy participant joining
 
 ### 🔧 **Technical Features**
 - ⚙️ Configurable WHIP/WHEP gateways
@@ -117,7 +119,8 @@ Perfect for testing, demos, or production use without the complexity of setting 
 
 - **Participant View** (`/join`): Camera access and live streaming
 - **Editor View** (`/editor`): Stream management with numbered mosaic and keyboard shortcuts
-- **OBS Browser Source** (`/source`): Integration with OBS Studio
+- **OBS Browser Source** (`/source`): Clean video output for OBS Studio Browser Source
+- **QR Code Display** (`/qr`): QR code for participant joining, ideal for OBS Browser Source
 
 ### Using the Application
 
@@ -134,8 +137,15 @@ Perfect for testing, demos, or production use without the complexity of setting 
    - Selected stream is synchronized across all devices
 
 3. **OBS Integration:**
-   - Add `http://localhost:3000/source` as Browser Source in OBS
-   - Source will automatically show the selected stream from editor
+   
+   **For Video Output:**
+   - Use **Window Capture** in OBS to capture the editor window (`/editor`)
+   - The selected stream in the editor will be displayed with visual indicators
+   - Alternatively, add `http://localhost:3000/source` as **Browser Source** for a clean output
+   
+   **For QR Code Display:**
+   - Add `http://localhost:3000/qr` as **Browser Source** in OBS
+   - QR code will display the join URL for participants to scan and join
 
 ## Configuration
 
