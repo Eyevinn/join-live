@@ -107,8 +107,11 @@ class JoinLiveApp {
                         this.channelId = match[1];
                         console.log('Channel ID:', this.channelId);
                         
-                        // Notify server that participant joined
-                        await this.notifyParticipantJoined();
+                        // Notify server that participant joined via WebSocket
+                        this.sendWebSocketMessage({
+                            type: 'participantJoin',
+                            channelId: this.channelId
+                        });
                     }
                 }
             } catch (error) {
@@ -132,9 +135,12 @@ class JoinLiveApp {
         try {
             this.showStatus('Stopping broadcast...', 'info');
             
-            // Notify server that participant is leaving
+            // Notify server that participant is leaving via WebSocket
             if (this.channelId) {
-                await this.notifyParticipantLeft();
+                this.sendWebSocketMessage({
+                    type: 'participantLeave',
+                    channelId: this.channelId
+                });
             }
             
             if (this.whipClient) {
@@ -245,47 +251,11 @@ class JoinLiveApp {
         this.countdownNotification.classList.add('hidden');
     }
     
-    async notifyParticipantJoined() {
-        if (!this.channelId) return;
-        
-        try {
-            const response = await fetch('/api/participant/join', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    channelId: this.channelId
-                })
-            });
-            
-            if (!response.ok) {
-                console.error('Failed to notify participant joined:', response.statusText);
-            }
-        } catch (error) {
-            console.error('Error notifying participant joined:', error);
-        }
-    }
-    
-    async notifyParticipantLeft() {
-        if (!this.channelId) return;
-        
-        try {
-            const response = await fetch('/api/participant/leave', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    channelId: this.channelId
-                })
-            });
-            
-            if (!response.ok) {
-                console.error('Failed to notify participant left:', response.statusText);
-            }
-        } catch (error) {
-            console.error('Error notifying participant left:', error);
+    sendWebSocketMessage(message) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(message));
+        } else {
+            console.warn('WebSocket not connected, message not sent:', message);
         }
     }
     
@@ -303,10 +273,13 @@ class JoinLiveApp {
         }
     }
     
-    async cleanup() {
-        // Notify server that participant is leaving
+    cleanup() {
+        // Notify server that participant is leaving via WebSocket
         if (this.channelId) {
-            await this.notifyParticipantLeft();
+            this.sendWebSocketMessage({
+                type: 'participantLeave',
+                channelId: this.channelId
+            });
         }
         
         if (this.localStream) {
