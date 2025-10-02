@@ -157,7 +157,15 @@ class JoinLiveApp {
             }
             
             if (this.whipClient) {
-                await this.whipClient.destroy();
+                const resourceUrl = await this.whipClient.getResourceUrl();
+                // Due to bug in SDK destroy() does not work if getResourceUrl() is not including base url
+                if (resourceUrl && !resourceUrl.startsWith('http')) {
+                    console.warn('Resource URL does not include base URL, will need manual DELETE call due to known SDK issue.');
+                    const deleteUrl = new URL(resourceUrl, this.whipGatewayUrl).toString();
+                    await fetch(deleteUrl, { method: 'DELETE' });
+                } else {
+                    await this.whipClient.destroy();
+                }
                 this.whipClient = null;
             }
             
