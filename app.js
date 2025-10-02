@@ -33,6 +33,7 @@ class JoinLiveApp {
         this.countdownNumber = document.getElementById('countdownNumber');
         
         this.initializeEventListeners();
+        this.initializeInstructionsToggle();
         this.loadConfiguration();
         this.initializeWebSocket();
     }
@@ -46,6 +47,18 @@ class JoinLiveApp {
         this.startCameraBtn.addEventListener('click', () => this.startCamera());
         this.joinLiveBtn.addEventListener('click', () => this.joinLive());
         this.stopStreamBtn.addEventListener('click', () => this.stopStreaming());
+    }
+    
+    initializeInstructionsToggle() {
+        const toggleBtn = document.getElementById('toggleInstructions');
+        const instructionsContent = document.getElementById('instructionsContent');
+        
+        if (toggleBtn && instructionsContent) {
+            toggleBtn.addEventListener('click', () => {
+                instructionsContent.classList.toggle('collapsed');
+                toggleBtn.textContent = instructionsContent.classList.contains('collapsed') ? '+' : '−';
+            });
+        }
     }
     
     async startCamera() {
