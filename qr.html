@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR Code - Join Live Stream</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #1a1a1a;
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: white;
+            overflow: hidden;
+        }
+        
+        .qr-container {
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .qr-header {
+            margin-bottom: 30px;
+        }
+        
+        .qr-header h1 {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #007bff, #28a745);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .qr-header p {
+            font-size: 24px;
+            color: #ccc;
+            margin-bottom: 5px;
+        }
+        
+        .qr-code-wrapper {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            display: inline-block;
+            margin: 20px 0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        
+        #qrcode {
+            display: block;
+        }
+        
+        .join-url {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 123, 255, 0.1);
+            border-radius: 10px;
+            border: 1px solid rgba(0, 123, 255, 0.3);
+        }
+        
+        .join-url-label {
+            font-size: 16px;
+            color: #007bff;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        
+        .join-url-text {
+            font-size: 20px;
+            font-family: monospace;
+            color: white;
+            word-break: break-all;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        .instructions {
+            margin-top: 30px;
+            color: #ccc;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+        
+        .instructions ul {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .instructions li {
+            margin: 10px 0;
+            padding-left: 30px;
+            position: relative;
+        }
+        
+        .instructions li::before {
+            content: '📱';
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        
+        .loading {
+            font-size: 20px;
+            color: #007bff;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .qr-container {
+                padding: 20px;
+                margin: 20px;
+            }
+            
+            .qr-header h1 {
+                font-size: 36px;
+            }
+            
+            .qr-header p {
+                font-size: 20px;
+            }
+            
+            .join-url-text {
+                font-size: 16px;
+            }
+            
+            .instructions {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="qr-container">
+        <div class="qr-header">
+            <h1>Join Live Stream</h1>
+            <p>Scan QR Code to Participate</p>
+        </div>
+        
+        <div id="qrcode-container">
+            <div class="qr-code-wrapper">
+                <img id="qr-image" style="display: block;" width="300" height="300" alt="QR Code for joining live stream">
+            </div>
+        </div>
+        
+        
+        <div class="instructions">
+            <ul>
+                <li>Open your phone's camera app</li>
+                <li>Point it at the QR code above</li>
+                <li>Tap the notification to join the stream</li>
+                <li>Allow camera and microphone access</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script>
+        class QRCodeDisplay {
+            constructor() {
+                this.joinUrl = window.location.origin + '/join';
+                this.generateQRCode();
+            }
+            
+            generateQRCode() {
+                try {
+                    const qrImage = document.getElementById('qr-image');
+                    
+                    // Use QR code API service
+                    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(this.joinUrl)}`;
+                    
+                    qrImage.src = qrApiUrl;
+                    qrImage.onerror = () => {
+                        // Fallback to another QR API
+                        const fallbackUrl = `https://chart.googleapis.com/chart?chs=300x300&cht=qr&chl=${encodeURIComponent(this.joinUrl)}`;
+                        qrImage.src = fallbackUrl;
+                        qrImage.onerror = () => {
+                            document.getElementById('qrcode-container').innerHTML = 
+                                '<div style="color: #dc3545; font-size: 18px;">Failed to generate QR code</div>';
+                        };
+                    };
+                    
+                    console.log('QR Code generated for:', this.joinUrl);
+                    
+                } catch (error) {
+                    console.error('Failed to generate QR code:', error);
+                    document.getElementById('qrcode-container').innerHTML = 
+                        '<div style="color: #dc3545; font-size: 18px;">Failed to generate QR code</div>';
+                }
+            }
+        }
+        
+        // Initialize when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                new QRCodeDisplay();
+            });
+        } else {
+            new QRCodeDisplay();
+        }
+    </script>
+</body>
+</html>

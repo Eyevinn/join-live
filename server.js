@@ -61,6 +61,10 @@ app.get('/source', (req, res) => {
     res.sendFile(path.join(__dirname, 'source.html'));
 });
 
+app.get('/qr', (req, res) => {
+    res.sendFile(path.join(__dirname, 'qr.html'));
+});
+
 // WebSocket state management
 let selectedChannelId = null;
 const connectedClients = new Set();
@@ -137,6 +141,7 @@ server.listen(port, () => {
     console.log(`Participant view: http://localhost:${port}/join`);
     console.log(`Editor view: http://localhost:${port}/editor`);
     console.log(`OBS Browser Source: http://localhost:${port}/source`);
+    console.log(`QR Code Display: http://localhost:${port}/qr`);
     console.log('');
     console.log(`WHIP Gateway Base: ${WHIP_GATEWAY_BASE}`);
     console.log(`WHIP Full URL: ${WHIP_GATEWAY_URL}`);

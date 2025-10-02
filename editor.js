@@ -34,6 +34,7 @@ class LiveBroadcastEditor {
         this.connectionStatus = document.getElementById('connectionStatus');
         this.refreshBtn = document.getElementById('refreshBtn');
         this.sourceBtn = document.getElementById('sourceBtn');
+        this.qrBtn = document.getElementById('qrBtn');
         this.settingsBtn = document.getElementById('settingsBtn');
         this.errorMessage = document.getElementById('errorMessage');
         this.prevPageBtn = document.getElementById('prevPageBtn');
@@ -71,6 +72,7 @@ class LiveBroadcastEditor {
     initializeEventListeners() {
         this.refreshBtn.addEventListener('click', () => this.refreshStreams());
         this.sourceBtn.addEventListener('click', () => this.openSource());
+        this.qrBtn.addEventListener('click', () => this.openQRCode());
         this.settingsBtn.addEventListener('click', () => this.showSettings());
         this.prevPageBtn.addEventListener('click', () => this.previousPage());
         this.nextPageBtn.addEventListener('click', () => this.nextPage());
@@ -483,6 +485,11 @@ class LiveBroadcastEditor {
     openSource() {
         const sourceUrl = '/source';
         window.open(sourceUrl, '_blank');
+    }
+    
+    openQRCode() {
+        const qrUrl = '/qr';
+        window.open(qrUrl, '_blank');
     }
     
     showSettings() {
