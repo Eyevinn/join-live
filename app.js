@@ -29,6 +29,8 @@ class JoinLiveApp {
         this.stopStreamBtn = document.getElementById('stopStreamBtn');
         this.statusDiv = document.getElementById('status');
         this.onAirIndicator = document.getElementById('onAirIndicator');
+        this.countdownNotification = document.getElementById('countdownNotification');
+        this.countdownNumber = document.getElementById('countdownNumber');
         
         this.initializeEventListeners();
         this.loadConfiguration();
@@ -168,6 +170,18 @@ class JoinLiveApp {
                     case 'channelDeselected':
                         this.updateOnAirStatus(null);
                         break;
+                        
+                    case 'countdownStart':
+                        this.showCountdown(data.channelId, data.seconds);
+                        break;
+                        
+                    case 'countdownUpdate':
+                        this.updateCountdown(data.seconds);
+                        break;
+                        
+                    case 'countdownCancelled':
+                        this.hideCountdown();
+                        break;
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -192,9 +206,35 @@ class JoinLiveApp {
         
         if (isOnAir) {
             this.onAirIndicator.style.display = 'flex';
+            // Hide countdown when participant goes on air
+            this.hideCountdown();
         } else {
             this.onAirIndicator.style.display = 'none';
         }
+    }
+    
+    showCountdown(channelId, seconds) {
+        // Only show countdown if this participant will be going on air
+        if (this.channelId && channelId === this.channelId) {
+            console.log(`Showing countdown: ${seconds} seconds`);
+            this.countdownNumber.textContent = seconds;
+            this.countdownNotification.classList.remove('hidden');
+        }
+    }
+    
+    updateCountdown(seconds) {
+        console.log(`Countdown update: ${seconds} seconds`);
+        this.countdownNumber.textContent = seconds;
+        // Trigger animation by removing and re-adding the class
+        this.countdownNumber.classList.remove('countdown-number');
+        setTimeout(() => {
+            this.countdownNumber.classList.add('countdown-number');
+        }, 10);
+    }
+    
+    hideCountdown() {
+        console.log('Hiding countdown');
+        this.countdownNotification.classList.add('hidden');
     }
     
     showStatus(message, type = 'info') {

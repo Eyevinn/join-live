@@ -119,6 +119,53 @@ wss.on('connection', (ws) => {
                         }
                     });
                     break;
+                    
+                case 'startCountdown':
+                    console.log(`Starting countdown for channel: ${data.channelId}`);
+                    
+                    // Broadcast countdown start to all connected clients
+                    const countdownStartMessage = JSON.stringify({
+                        type: 'countdownStart',
+                        channelId: data.channelId,
+                        seconds: data.seconds
+                    });
+                    
+                    connectedClients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(countdownStartMessage);
+                        }
+                    });
+                    break;
+                    
+                case 'countdownUpdate':
+                    // Broadcast countdown update to all connected clients
+                    const countdownUpdateMessage = JSON.stringify({
+                        type: 'countdownUpdate',
+                        channelId: data.channelId,
+                        seconds: data.seconds
+                    });
+                    
+                    connectedClients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(countdownUpdateMessage);
+                        }
+                    });
+                    break;
+                    
+                case 'cancelCountdown':
+                    console.log('Countdown cancelled');
+                    
+                    // Broadcast countdown cancellation to all connected clients
+                    const cancelCountdownMessage = JSON.stringify({
+                        type: 'countdownCancelled'
+                    });
+                    
+                    connectedClients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(cancelCountdownMessage);
+                        }
+                    });
+                    break;
             }
         } catch (error) {
             console.error('Error parsing WebSocket message:', error);
