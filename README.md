@@ -46,7 +46,7 @@ A comprehensive web application for live broadcasting that enables participants 
 - 📊 Live stream monitoring and management
 
 ### 🎮 **OBS Studio Integration**
-- 🖥️ **Window Capture**: Capture editor interface directly for complete control visibility
+- 🖥️ **Screen/Window Capture**: Capture participant video feed for broadcast output
 - 🌐 **Browser Source**: Clean video output (`/source`) and QR code display (`/qr`)
 - 🔄 Automatic stream switching based on editor selection
 - 📡 Real-time updates via WebSocket
@@ -139,8 +139,8 @@ Perfect for testing, demos, or production use without the complexity of setting 
 3. **OBS Integration:**
    
    **For Video Output:**
-   - Use **Window Capture** in OBS to capture the editor window (`/editor`)
-   - The selected stream in the editor will be displayed with visual indicators
+   - Use **Screen Capture** (or **Window Capture**) in OBS to capture the participant's video feed
+   - The selected participant's video will be displayed full-screen based on editor selection
    - Alternatively, add `http://localhost:3000/source` as **Browser Source** for a clean output
    
    **For QR Code Display:**
