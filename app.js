@@ -206,6 +206,8 @@ class JoinLiveApp {
         
         if (isOnAir) {
             this.onAirIndicator.style.display = 'flex';
+            // Hide countdown when participant goes on air
+            this.hideCountdown();
         } else {
             this.onAirIndicator.style.display = 'none';
         }
