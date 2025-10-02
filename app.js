@@ -33,6 +33,7 @@ class JoinLiveApp {
         this.countdownNumber = document.getElementById('countdownNumber');
         
         this.initializeEventListeners();
+        this.initializeInstructionsToggle();
         this.loadConfiguration();
         this.initializeWebSocket();
     }
@@ -46,6 +47,18 @@ class JoinLiveApp {
         this.startCameraBtn.addEventListener('click', () => this.startCamera());
         this.joinLiveBtn.addEventListener('click', () => this.joinLive());
         this.stopStreamBtn.addEventListener('click', () => this.stopStreaming());
+    }
+    
+    initializeInstructionsToggle() {
+        const toggleBtn = document.getElementById('toggleInstructions');
+        const instructionsContent = document.getElementById('instructionsContent');
+        
+        if (toggleBtn && instructionsContent) {
+            toggleBtn.addEventListener('click', () => {
+                instructionsContent.classList.toggle('collapsed');
+                toggleBtn.textContent = instructionsContent.classList.contains('collapsed') ? '+' : '−';
+            });
+        }
     }
     
     async startCamera() {
@@ -144,7 +157,15 @@ class JoinLiveApp {
             }
             
             if (this.whipClient) {
-                await this.whipClient.destroy();
+                const resourceUrl = await this.whipClient.getResourceUrl();
+                // Due to bug in SDK destroy() does not work if getResourceUrl() is not including base url
+                if (resourceUrl && !resourceUrl.startsWith('http')) {
+                    console.warn('Resource URL does not include base URL, will need manual DELETE call due to known SDK issue.');
+                    const deleteUrl = new URL(resourceUrl, this.whipGatewayUrl).toString();
+                    await fetch(deleteUrl, { method: 'DELETE' });
+                } else {
+                    await this.whipClient.destroy();
+                }
                 this.whipClient = null;
             }
             

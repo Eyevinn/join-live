@@ -187,11 +187,146 @@
             0% { opacity: 1; }
             100% { opacity: 0.3; }
         }
+        
+        /* Instructions Section */
+        .instructions {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .instructions h3 {
+            color: #333;
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+        
+        .instructions h4 {
+            color: #333;
+            margin: 20px 0 10px 0;
+            font-size: 16px;
+        }
+        
+        .instructions ol, .instructions ul {
+            margin: 0 0 15px 0;
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .indicator-guide {
+            background: #fff;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid #e9ecef;
+        }
+        
+        .indicator-example {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .indicator-example.countdown {
+            background: rgba(0, 123, 255, 0.1);
+            color: #007bff;
+            border: 1px solid rgba(0, 123, 255, 0.3);
+        }
+        
+        .indicator-example.on-air {
+            background: rgba(220, 53, 69, 0.1);
+            color: #dc3545;
+            border: 1px solid rgba(220, 53, 69, 0.3);
+        }
+        
+        .tip {
+            background: #fff3cd;
+            color: #856404;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 15px 0 0 0;
+            border: 1px solid #ffeaa7;
+            font-size: 14px;
+        }
+        
+        .instructions-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .toggle-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 18px;
+            line-height: 1;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .toggle-btn:hover {
+            background: #0056b3;
+            transform: scale(1.1);
+        }
+        
+        .instructions-content {
+            transition: all 0.3s ease;
+            overflow: hidden;
+        }
+        
+        .instructions-content.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin: 0;
+            padding: 0;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Join Live Broadcast</h1>
+        
+        <!-- Instructions Section -->
+        <div class="instructions">
+            <div class="instructions-header">
+                <h3>📺 How it works:</h3>
+                <button id="toggleInstructions" class="toggle-btn" title="Hide/Show Instructions">−</button>
+            </div>
+            <div id="instructionsContent" class="instructions-content">
+            <ol>
+                <li><strong>Start Camera</strong> - Allow camera access to preview your video</li>
+                <li><strong>Join Live</strong> - Connect to the broadcast (you'll be visible to the producer)</li>
+                <li><strong>Wait for Selection</strong> - The producer will select when to put you on air</li>
+                <li><strong>Watch for Indicators</strong> - You'll see notifications when going live</li>
+            </ol>
+            
+            <div class="indicator-guide">
+                <h4>🔴 On-Air Indicators:</h4>
+                <ul>
+                    <li><span class="indicator-example countdown">5...4...3...</span> <strong>Countdown:</strong> You're going on air in seconds!</li>
+                    <li><span class="indicator-example on-air">● ON AIR</span> <strong>Live Now:</strong> You're currently broadcasting to viewers</li>
+                </ul>
+            </div>
+            
+            <p class="tip">💡 <strong>Tip:</strong> Stay ready once you join - the producer can put you on air at any time!</p>
+            </div>
+        </div>
         
         <div class="video-container">
             <video id="localVideo" autoplay muted playsinline></video>

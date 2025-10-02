@@ -53,7 +53,12 @@ class LiveBroadcastEditor {
         this.countdownTimer = null;
         this.pendingSelection = null;
         
+        // Audio notification settings
+        this.audioNotificationsEnabled = localStorage.getItem('audioNotificationsEnabled') === 'true' || localStorage.getItem('audioNotificationsEnabled') === null; // Default to true
+        this.notificationAudio = null;
+        
         this.loadConfiguration();
+        this.initializeAudioNotification();
         this.initializeEventListeners();
         this.initializeWebSocket();
         this.loadSelectedChannel();
@@ -87,6 +92,10 @@ class LiveBroadcastEditor {
         this.applyGridBtn.addEventListener('click', () => this.applyGridSettings());
         this.countdownToggle.addEventListener('click', () => this.toggleCountdown());
         
+        // Audio notification toggle
+        const audioNotificationToggle = document.getElementById('audioNotificationToggle');
+        audioNotificationToggle.addEventListener('click', () => this.toggleAudioNotifications());
+        
         // Close modal when clicking outside
         this.settingsModal.addEventListener('click', (e) => {
             if (e.target === this.settingsModal) {
@@ -106,6 +115,76 @@ class LiveBroadcastEditor {
                 this.handleKeyboardShortcut(e);
             }
         });
+    }
+    
+    initializeAudioNotification() {
+        // Create audio element with a subtle notification sound (using Web Audio API to generate a tone)
+        this.createNotificationSound();
+        
+        // Set initial toggle state
+        const audioNotificationToggle = document.getElementById('audioNotificationToggle');
+        if (this.audioNotificationsEnabled) {
+            audioNotificationToggle.classList.add('active');
+        }
+    }
+    
+    createNotificationSound() {
+        // Create a subtle notification sound using Web Audio API
+        if (!window.AudioContext && !window.webkitAudioContext) {
+            console.warn('Web Audio API not supported');
+            return;
+        }
+        
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    
+    playNotificationSound() {
+        if (!this.audioNotificationsEnabled || !this.audioContext) return;
+        
+        try {
+            // Resume audio context if suspended (required by some browsers)
+            if (this.audioContext.state === 'suspended') {
+                this.audioContext.resume();
+            }
+            
+            // Create a pleasant notification sound
+            const oscillator = this.audioContext.createOscillator();
+            const gainNode = this.audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(this.audioContext.destination);
+            
+            // Create a pleasant two-tone chime
+            oscillator.frequency.setValueAtTime(800, this.audioContext.currentTime);
+            oscillator.frequency.setValueAtTime(1000, this.audioContext.currentTime + 0.1);
+            
+            // Set volume envelope
+            gainNode.gain.setValueAtTime(0, this.audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.1, this.audioContext.currentTime + 0.01);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.3);
+            
+            oscillator.start(this.audioContext.currentTime);
+            oscillator.stop(this.audioContext.currentTime + 0.3);
+            
+        } catch (error) {
+            console.warn('Failed to play notification sound:', error);
+        }
+    }
+    
+    toggleAudioNotifications() {
+        this.audioNotificationsEnabled = !this.audioNotificationsEnabled;
+        localStorage.setItem('audioNotificationsEnabled', this.audioNotificationsEnabled.toString());
+        
+        const audioNotificationToggle = document.getElementById('audioNotificationToggle');
+        if (this.audioNotificationsEnabled) {
+            audioNotificationToggle.classList.add('active');
+            // Play test sound when enabling
+            setTimeout(() => this.playNotificationSound(), 100);
+        } else {
+            audioNotificationToggle.classList.remove('active');
+        }
+        
+        console.log(`Audio notifications ${this.audioNotificationsEnabled ? 'enabled' : 'disabled'}`);
     }
     
     async refreshStreams() {
@@ -748,12 +827,16 @@ class LiveBroadcastEditor {
                         
                     case 'participantJoined':
                         console.log(`Participant joined: ${data.channelId}`);
-                        this.refreshStreams();
+                        // Play notification sound
+                        this.playNotificationSound();
+                        // Delay refresh to allow stream establishment at gateway
+                        setTimeout(() => this.refreshStreams(), 2000);
                         break;
                         
                     case 'participantLeft':
                         console.log(`Participant left: ${data.channelId}`);
-                        this.refreshStreams();
+                        // Delay refresh to allow stream cleanup at gateway
+                        setTimeout(() => this.refreshStreams(), 2000);
                         break;
                 }
             } catch (error) {
