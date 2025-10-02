@@ -45,6 +45,13 @@ class LiveBroadcastEditor {
         this.gridColumnsInput = document.getElementById('gridColumns');
         this.gridRowsInput = document.getElementById('gridRows');
         this.applyGridBtn = document.getElementById('applyGridBtn');
+        this.countdownToggle = document.getElementById('countdownToggle');
+        this.countdownStatus = document.getElementById('countdownStatus');
+        
+        // Countdown state
+        this.countdownEnabled = false;
+        this.countdownTimer = null;
+        this.pendingSelection = null;
         
         this.loadConfiguration();
         this.initializeEventListeners();
@@ -78,6 +85,7 @@ class LiveBroadcastEditor {
         this.nextPageBtn.addEventListener('click', () => this.nextPage());
         this.closeModalBtn.addEventListener('click', () => this.hideSettings());
         this.applyGridBtn.addEventListener('click', () => this.applyGridSettings());
+        this.countdownToggle.addEventListener('click', () => this.toggleCountdown());
         
         // Close modal when clicking outside
         this.settingsModal.addEventListener('click', (e) => {
@@ -492,6 +500,32 @@ class LiveBroadcastEditor {
         window.open(qrUrl, '_blank');
     }
     
+    toggleCountdown() {
+        this.countdownEnabled = !this.countdownEnabled;
+        
+        if (this.countdownEnabled) {
+            this.countdownToggle.classList.add('active');
+            this.countdownStatus.textContent = 'Take in 5';
+        } else {
+            this.countdownToggle.classList.remove('active');
+            this.countdownStatus.textContent = 'Take';
+            
+            // Cancel any pending countdown
+            if (this.countdownTimer) {
+                clearTimeout(this.countdownTimer);
+                this.countdownTimer = null;
+            }
+            if (this.pendingSelection) {
+                this.sendWebSocketMessage({
+                    type: 'cancelCountdown'
+                });
+                this.pendingSelection = null;
+            }
+        }
+        
+        console.log(`Countdown mode ${this.countdownEnabled ? 'enabled' : 'disabled'}`);
+    }
+    
     showSettings() {
         // Update settings values
         document.getElementById('whepGatewayValue').textContent = this.whepGatewayUrl;
@@ -592,8 +626,79 @@ class LiveBroadcastEditor {
                 type: 'deselectChannel'
             });
             
+            // Cancel any pending countdown
+            if (this.countdownTimer) {
+                clearTimeout(this.countdownTimer);
+                this.countdownTimer = null;
+            }
+            if (this.pendingSelection) {
+                this.sendWebSocketMessage({
+                    type: 'cancelCountdown'
+                });
+                this.pendingSelection = null;
+            }
+            
             return;
         }
+        
+        // Cancel any existing countdown
+        if (this.countdownTimer) {
+            clearTimeout(this.countdownTimer);
+            this.countdownTimer = null;
+        }
+        if (this.pendingSelection) {
+            this.sendWebSocketMessage({
+                type: 'cancelCountdown'
+            });
+        }
+        
+        // Check if countdown is enabled
+        if (this.countdownEnabled) {
+            // Start countdown
+            this.pendingSelection = streamId;
+            this.startCountdown(streamId);
+        } else {
+            // Immediate selection
+            this.actuallySelectStream(streamId);
+        }
+    }
+    
+    startCountdown(streamId) {
+        console.log(`Starting countdown for stream: ${streamId}`);
+        
+        // Send countdown start message to participants
+        this.sendWebSocketMessage({
+            type: 'startCountdown',
+            channelId: streamId,
+            seconds: 5
+        });
+        
+        // Start the countdown timer
+        let timeLeft = 5;
+        const countdownInterval = setInterval(() => {
+            timeLeft--;
+            
+            if (timeLeft > 0) {
+                // Update countdown message
+                this.sendWebSocketMessage({
+                    type: 'countdownUpdate',
+                    channelId: streamId,
+                    seconds: timeLeft
+                });
+            } else {
+                // Countdown finished, actually select the stream
+                clearInterval(countdownInterval);
+                this.countdownTimer = null;
+                this.pendingSelection = null;
+                this.actuallySelectStream(streamId);
+            }
+        }, 1000);
+        
+        this.countdownTimer = countdownInterval;
+    }
+    
+    actuallySelectStream(streamId) {
+        console.log(`Actually selecting stream: ${streamId}`);
         
         // Update visual selection
         const previousSelected = document.querySelector('.stream-tile.selected');

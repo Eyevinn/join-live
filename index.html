@@ -111,6 +111,36 @@
             display: none;
         }
         
+        .countdown-notification {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 123, 255, 0.95);
+            color: white;
+            padding: 30px 40px;
+            border-radius: 15px;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .countdown-number {
+            font-size: 48px;
+            margin: 10px 0;
+            animation: countdownPulse 1s ease-in-out;
+        }
+        
+        @keyframes countdownPulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
         .on-air-indicator {
             position: absolute;
             top: 15px;
@@ -178,6 +208,13 @@
         </div>
         
         <div id="status" class="status hidden"></div>
+    </div>
+    
+    <!-- Countdown Notification -->
+    <div id="countdownNotification" class="countdown-notification hidden">
+        <div>Going on air in</div>
+        <div id="countdownNumber" class="countdown-number">5</div>
+        <div>seconds</div>
     </div>
     
     <script src="config.js"></script>
