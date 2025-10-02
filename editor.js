@@ -754,7 +754,8 @@ class LiveBroadcastEditor {
                         
                     case 'participantLeft':
                         console.log(`Participant left: ${data.channelId}`);
-                        this.refreshStreams();
+                        // Delay refresh to allow stream cleanup at gateway
+                        setTimeout(() => this.refreshStreams(), 2000);
                         break;
                 }
             } catch (error) {
