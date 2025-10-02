@@ -65,9 +65,11 @@ app.get('/qr', (req, res) => {
     res.sendFile(path.join(__dirname, 'qr.html'));
 });
 
+
 // WebSocket state management
 let selectedChannelId = null;
 const connectedClients = new Set();
+const participantChannels = new Set(); // Track active participant channels
 
 // WebSocket connection handling
 wss.on('connection', (ws) => {
@@ -118,6 +120,58 @@ wss.on('connection', (ws) => {
                             client.send(deselectMessage);
                         }
                     });
+                    break;
+                    
+                case 'participantJoin':
+                    if (data.channelId) {
+                        console.log(`Participant joined: ${data.channelId}`);
+                        participantChannels.add(data.channelId);
+                        
+                        // Broadcast to all connected clients that a new participant has joined
+                        const joinMessage = JSON.stringify({
+                            type: 'participantJoined',
+                            channelId: data.channelId
+                        });
+                        
+                        connectedClients.forEach(client => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(joinMessage);
+                            }
+                        });
+                    }
+                    break;
+                    
+                case 'participantLeave':
+                    if (data.channelId) {
+                        console.log(`Participant left: ${data.channelId}`);
+                        participantChannels.delete(data.channelId);
+                        
+                        // Broadcast to all connected clients that a participant has left
+                        const leaveMessage = JSON.stringify({
+                            type: 'participantLeft',
+                            channelId: data.channelId
+                        });
+                        
+                        connectedClients.forEach(client => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(leaveMessage);
+                            }
+                        });
+                        
+                        // If the leaving participant was selected, deselect them
+                        if (selectedChannelId === data.channelId) {
+                            selectedChannelId = null;
+                            const deselectMessage = JSON.stringify({
+                                type: 'channelDeselected'
+                            });
+                            
+                            connectedClients.forEach(client => {
+                                if (client.readyState === WebSocket.OPEN) {
+                                    client.send(deselectMessage);
+                                }
+                            });
+                        }
+                    }
                     break;
                     
                 case 'startCountdown':

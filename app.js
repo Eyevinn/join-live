@@ -106,6 +106,12 @@ class JoinLiveApp {
                     if (match) {
                         this.channelId = match[1];
                         console.log('Channel ID:', this.channelId);
+                        
+                        // Notify server that participant joined via WebSocket
+                        this.sendWebSocketMessage({
+                            type: 'participantJoin',
+                            channelId: this.channelId
+                        });
                     }
                 }
             } catch (error) {
@@ -128,6 +134,14 @@ class JoinLiveApp {
     async stopStreaming() {
         try {
             this.showStatus('Stopping broadcast...', 'info');
+            
+            // Notify server that participant is leaving via WebSocket
+            if (this.channelId) {
+                this.sendWebSocketMessage({
+                    type: 'participantLeave',
+                    channelId: this.channelId
+                });
+            }
             
             if (this.whipClient) {
                 await this.whipClient.destroy();
@@ -237,6 +251,14 @@ class JoinLiveApp {
         this.countdownNotification.classList.add('hidden');
     }
     
+    sendWebSocketMessage(message) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(message));
+        } else {
+            console.warn('WebSocket not connected, message not sent:', message);
+        }
+    }
+    
     showStatus(message, type = 'info') {
         this.statusDiv.textContent = message;
         this.statusDiv.className = `status ${type}`;
@@ -252,6 +274,14 @@ class JoinLiveApp {
     }
     
     cleanup() {
+        // Notify server that participant is leaving via WebSocket
+        if (this.channelId) {
+            this.sendWebSocketMessage({
+                type: 'participantLeave',
+                channelId: this.channelId
+            });
+        }
+        
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => track.stop());
         }

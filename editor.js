@@ -745,6 +745,16 @@ class LiveBroadcastEditor {
                         this.selectedChannelId = null;
                         this.updateStreamTiles();
                         break;
+                        
+                    case 'participantJoined':
+                        console.log(`Participant joined: ${data.channelId}`);
+                        this.refreshStreams();
+                        break;
+                        
+                    case 'participantLeft':
+                        console.log(`Participant left: ${data.channelId}`);
+                        this.refreshStreams();
+                        break;
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
