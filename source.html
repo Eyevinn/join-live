@@ -465,7 +465,7 @@
             }
 
             initializeQRCode() {
-                const joinUrl = window.location.origin + '/index.html';
+                const joinUrl = window.location.origin + '/join';
                 const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(joinUrl)}`;
 
                 this.qrImage.src = qrApiUrl;
@@ -474,6 +474,8 @@
                     this.qrImage.src = fallbackUrl;
                     this.qrImage.onerror = () => {
                         console.error('Failed to generate QR code');
+                        // Hide QR code if generation fails
+                        this.qrCodeContainer.style.display = 'none';
                     };
                 };
 
