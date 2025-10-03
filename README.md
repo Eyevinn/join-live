@@ -38,18 +38,31 @@ A comprehensive web application for live broadcasting that enables participants 
 - 🔴 One-click live broadcasting via WHIP
 - 📱 Responsive design for desktop and mobile
 - 🎛️ Real-time status updates
+- ✨ Real-time on-air indicator when selected in editor
+
+### 💬 **Participant Messaging System**
+- 📝 Submit questions and comments without joining broadcast
+- 🔍 Moderator queue for reviewing and approving messages  
+- ✅ Real-time message approval/rejection workflow
+- 📺 Clean messages feed optimized for OBS overlay
+- 💌 Editor can send broadcast messages to all participants
 
 ### 🎛️ **Professional Editor Interface**
 - 📺 Numbered stream mosaic view
 - ⌨️ Keyboard shortcuts (1-9, 0) for instant stream selection
 - 🔄 Real-time synchronization across all devices
 - 📊 Live stream monitoring and management
+- 💬 Integrated message moderation system
+- 🔔 Audio notifications for participant joins (configurable)
+- 📋 Comprehensive participant instructions display
 
 ### 🎮 **OBS Studio Integration**
 - 🖥️ **Screen/Window Capture**: Capture participant video feed for broadcast output
 - 🌐 **Browser Source**: QR code display (`/qr`) for easy participant joining
+- 💬 **Messages Feed**: Live messages overlay (`/feed`) for audience interaction
 - 🔄 Automatic stream switching based on editor selection
 - 📡 Real-time updates via WebSocket
+- ⚫ Black background video output with QR code when no participants selected
 
 ### 🔧 **Technical Features**
 - ⚙️ Configurable WHIP/WHEP gateways
@@ -116,33 +129,62 @@ Perfect for testing, demos, or production use without the complexity of setting 
 
 ### Application Views
 
-- **Participant View** (`/join`): Camera access and live streaming
-- **Editor View** (`/editor`): Stream management with numbered mosaic and keyboard shortcuts
+- **Participant View** (`/join`): Camera access, live streaming, and messaging
+- **Editor View** (`/editor`): Stream management, message moderation, and broadcast controls
+- **Video Output** (`/source`): Clean video output for OBS screen capture
 - **QR Code Display** (`/qr`): QR code for participant joining, use as OBS Browser Source
+- **Messages Feed** (`/feed`): Live messages overlay for OBS Browser Source
 
 ### Using the Application
 
 1. **Join as Participant:**
    - Visit `http://localhost:3000/join`
-   - Click "Start Camera" to preview your video
-   - Click "Join Live" to start broadcasting
-   - Click "Stop Streaming" to end the broadcast
+   - **For Broadcasting:** Click "Start Camera" to preview, then "Join Live" to start streaming
+   - **For Messaging:** Submit questions/comments using the messaging section
+   - Real-time on-air indicator shows when you're selected in the editor
 
 2. **Editor Interface:**
    - Visit `http://localhost:3000/editor`
-   - View numbered mosaic of all active streams
-   - Press number keys `1-9` (and `0` for 10th stream) to select streams
+   - **Stream Management:** View numbered mosaic, use keys `1-9` (and `0` for 10th stream)
+   - **Message Moderation:** Review, approve, or reject participant messages
+   - **Settings:** Configure audio notifications and other preferences
    - Selected stream is synchronized across all devices
 
 3. **OBS Integration:**
    
    **For Video Output:**
-   - Use **Screen Capture** (or **Window Capture**) in OBS to capture the participant's video feed
+   - Use **Screen Capture** (or **Window Capture**) in OBS to capture `http://localhost:3000/source`
    - The selected participant's video will be displayed full-screen based on editor selection
+   - Shows QR code when no participants are selected
    
    **For QR Code Display:**
    - Add `http://localhost:3000/qr` as **Browser Source** in OBS
    - QR code will display the join URL for participants to scan and join
+   
+   **For Messages Feed:**
+   - Add `http://localhost:3000/feed` as **Browser Source** in OBS
+   - Displays approved messages as a live overlay for audience interaction
+
+## Messaging System
+
+The application includes a comprehensive messaging system that allows participants to submit questions and comments, with moderator approval workflow for live broadcast integration.
+
+### Key Features
+
+- **Participant Messaging**: Submit questions/comments without needing to join the broadcast
+- **Moderator Queue**: Review all submitted messages in the editor interface
+- **Approval Workflow**: Approve or reject messages with one-click actions
+- **Live Feed**: Approved messages display in real-time on the messages feed
+- **OBS Integration**: Use `/feed` as a browser source for live message overlays
+- **Broadcast Messages**: Editors can send messages to all participants
+- **Real-time Updates**: All messaging happens via WebSocket for instant delivery
+
+### Usage Workflow
+
+1. **Participants** visit `/join` and submit messages using the messaging form
+2. **Editor** reviews messages in the moderation queue at `/editor`
+3. **Approved messages** appear instantly on `/feed` for OBS overlay
+4. **Audience** sees approved messages during the live broadcast
 
 ## Configuration
 
