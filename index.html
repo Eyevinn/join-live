@@ -296,6 +296,100 @@
             margin: 0;
             padding: 0;
         }
+
+        .messaging-section {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #28a745;
+        }
+
+        .messaging-section h3 {
+            color: #333;
+            margin: 0 0 15px 0;
+            font-size: 18px;
+        }
+
+        .message-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .form-group input,
+        .form-group textarea {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-group textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-success {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background-color: #218838;
+        }
+
+        .btn-success:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+
+        .editor-messages {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 6px;
+            border-left: 4px solid #2196f3;
+        }
+
+        .editor-message {
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #ddd;
+        }
+
+        .editor-message:last-child {
+            margin-bottom: 0;
+        }
+
+        .message-meta {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .message-text {
+            color: #333;
+            line-height: 1.4;
+        }
     </style>
 </head>
 <body>
@@ -327,7 +421,35 @@
             <p class="tip">💡 <strong>Tip:</strong> Stay ready once you join - the producer can put you on air at any time!</p>
             </div>
         </div>
-        
+
+        <!-- Messaging Section -->
+        <div class="messaging-section">
+            <h3>💬 Send a Message or Question</h3>
+            <p>Submit a question or comment that the moderator can choose to publish:</p>
+
+            <form id="messageForm" class="message-form">
+                <div class="form-group">
+                    <label for="participantName">Your Name/Handle:</label>
+                    <input type="text" id="participantName" name="name" required maxlength="50" placeholder="Enter your name">
+                </div>
+
+                <div class="form-group">
+                    <label for="participantMessage">Message/Question:</label>
+                    <textarea id="participantMessage" name="message" required maxlength="500" placeholder="Enter your message or question..."></textarea>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" id="submitMessageBtn" class="btn btn-success">Send Message</button>
+                </div>
+            </form>
+
+            <!-- Editor Messages -->
+            <div id="editorMessages" class="editor-messages" style="display: none;">
+                <h4>📢 Messages from Moderator</h4>
+                <div id="editorMessageList"></div>
+            </div>
+        </div>
+
         <div class="video-container">
             <video id="localVideo" autoplay muted playsinline></video>
             <div id="onAirIndicator" class="on-air-indicator">

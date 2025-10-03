@@ -34,6 +34,7 @@ class JoinLiveApp {
         
         this.initializeEventListeners();
         this.initializeInstructionsToggle();
+        this.initializeMessaging();
         this.loadConfiguration();
         this.initializeWebSocket();
     }
@@ -52,13 +53,48 @@ class JoinLiveApp {
     initializeInstructionsToggle() {
         const toggleBtn = document.getElementById('toggleInstructions');
         const instructionsContent = document.getElementById('instructionsContent');
-        
+
         if (toggleBtn && instructionsContent) {
             toggleBtn.addEventListener('click', () => {
                 instructionsContent.classList.toggle('collapsed');
                 toggleBtn.textContent = instructionsContent.classList.contains('collapsed') ? '+' : '−';
             });
         }
+    }
+
+    initializeMessaging() {
+        this.messageForm = document.getElementById('messageForm');
+        this.submitMessageBtn = document.getElementById('submitMessageBtn');
+        this.editorMessages = document.getElementById('editorMessages');
+        this.editorMessageList = document.getElementById('editorMessageList');
+
+        if (this.messageForm) {
+            this.messageForm.addEventListener('submit', (e) => this.handleMessageSubmit(e));
+        }
+    }
+
+    async handleMessageSubmit(e) {
+        e.preventDefault();
+
+        const nameInput = document.getElementById('participantName');
+        const messageInput = document.getElementById('participantMessage');
+
+        const name = nameInput.value.trim();
+        const message = messageInput.value.trim();
+
+        if (!name || !message) {
+            this.showStatus('Please enter both name and message', 'error');
+            return;
+        }
+
+        this.submitMessageBtn.disabled = true;
+        this.submitMessageBtn.textContent = 'Sending...';
+
+        this.sendWebSocketMessage({
+            type: 'submitMessage',
+            name: name,
+            message: message
+        });
     }
     
     async startCamera() {
@@ -217,6 +253,14 @@ class JoinLiveApp {
                     case 'countdownCancelled':
                         this.hideCountdown();
                         break;
+
+                    case 'messageSubmitted':
+                        this.handleMessageSubmitted(data);
+                        break;
+
+                    case 'editorMessageReceived':
+                        this.displayEditorMessage(data.message);
+                        break;
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -277,6 +321,51 @@ class JoinLiveApp {
             this.ws.send(JSON.stringify(message));
         } else {
             console.warn('WebSocket not connected, message not sent:', message);
+        }
+    }
+
+    handleMessageSubmitted(data) {
+        this.submitMessageBtn.disabled = false;
+        this.submitMessageBtn.textContent = 'Send Message';
+
+        if (data.success) {
+            this.showStatus('Message submitted! It will be reviewed by the moderator.', 'success');
+
+            // Clear the form
+            document.getElementById('participantName').value = '';
+            document.getElementById('participantMessage').value = '';
+        } else {
+            this.showStatus(`Error: ${data.error || 'Failed to submit message'}`, 'error');
+        }
+    }
+
+    displayEditorMessage(message) {
+        if (!this.editorMessageList) return;
+
+        const messageEl = document.createElement('div');
+        messageEl.className = 'editor-message';
+
+        const metaEl = document.createElement('div');
+        metaEl.className = 'message-meta';
+        metaEl.textContent = `${message.name} • ${new Date(message.timestamp).toLocaleTimeString()}`;
+
+        const textEl = document.createElement('div');
+        textEl.className = 'message-text';
+        textEl.textContent = message.message;
+
+        messageEl.appendChild(metaEl);
+        messageEl.appendChild(textEl);
+
+        // Insert at the beginning
+        this.editorMessageList.insertBefore(messageEl, this.editorMessageList.firstChild);
+
+        // Show the editor messages section
+        this.editorMessages.style.display = 'block';
+
+        // Limit to 10 messages
+        const messages = this.editorMessageList.querySelectorAll('.editor-message');
+        if (messages.length > 10) {
+            messages[messages.length - 1].remove();
         }
     }
     
