@@ -65,11 +65,20 @@ app.get('/qr', (req, res) => {
     res.sendFile(path.join(__dirname, 'qr.html'));
 });
 
+app.get('/feed', (req, res) => {
+    res.sendFile(path.join(__dirname, 'feed.html'));
+});
+
 
 // WebSocket state management
 let selectedChannelId = null;
 const connectedClients = new Set();
 const participantChannels = new Set(); // Track active participant channels
+
+// Message queue for participant questions/comments
+const messageQueue = [];
+const publishedMessages = [];
+let messageIdCounter = 1;
 
 // WebSocket connection handling
 wss.on('connection', (ws) => {
@@ -208,17 +217,145 @@ wss.on('connection', (ws) => {
                     
                 case 'cancelCountdown':
                     console.log('Countdown cancelled');
-                    
+
                     // Broadcast countdown cancellation to all connected clients
                     const cancelCountdownMessage = JSON.stringify({
                         type: 'countdownCancelled'
                     });
-                    
+
                     connectedClients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
                             client.send(cancelCountdownMessage);
                         }
                     });
+                    break;
+
+                case 'submitMessage':
+                    if (data.name && data.message) {
+                        const newMessage = {
+                            id: messageIdCounter++,
+                            name: data.name.trim(),
+                            message: data.message.trim(),
+                            timestamp: new Date().toISOString(),
+                            status: 'pending' // pending, approved, rejected
+                        };
+
+                        messageQueue.push(newMessage);
+                        console.log(`New message from ${newMessage.name}: ${newMessage.message}`);
+
+                        // Notify editors about new message in queue
+                        const newMessageNotification = JSON.stringify({
+                            type: 'newMessageInQueue',
+                            message: newMessage
+                        });
+
+                        connectedClients.forEach(client => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(newMessageNotification);
+                            }
+                        });
+
+                        // Confirm to sender
+                        ws.send(JSON.stringify({
+                            type: 'messageSubmitted',
+                            success: true
+                        }));
+                    } else {
+                        ws.send(JSON.stringify({
+                            type: 'messageSubmitted',
+                            success: false,
+                            error: 'Name and message are required'
+                        }));
+                    }
+                    break;
+
+                case 'approveMessage':
+                    if (data.messageId) {
+                        const messageIndex = messageQueue.findIndex(msg => msg.id === data.messageId);
+                        if (messageIndex !== -1) {
+                            const approvedMessage = messageQueue[messageIndex];
+                            approvedMessage.status = 'approved';
+                            approvedMessage.approvedAt = new Date().toISOString();
+
+                            // Move to published messages
+                            publishedMessages.unshift(approvedMessage);
+                            messageQueue.splice(messageIndex, 1);
+
+                            console.log(`Message approved: ${approvedMessage.message}`);
+
+                            // Broadcast to all clients
+                            const messageApprovedNotification = JSON.stringify({
+                                type: 'messageApproved',
+                                message: approvedMessage
+                            });
+
+                            connectedClients.forEach(client => {
+                                if (client.readyState === WebSocket.OPEN) {
+                                    client.send(messageApprovedNotification);
+                                }
+                            });
+                        }
+                    }
+                    break;
+
+                case 'rejectMessage':
+                    if (data.messageId) {
+                        const messageIndex = messageQueue.findIndex(msg => msg.id === data.messageId);
+                        if (messageIndex !== -1) {
+                            const rejectedMessage = messageQueue[messageIndex];
+                            rejectedMessage.status = 'rejected';
+                            messageQueue.splice(messageIndex, 1);
+
+                            console.log(`Message rejected: ${rejectedMessage.message}`);
+
+                            // Notify editors
+                            const messageRejectedNotification = JSON.stringify({
+                                type: 'messageRejected',
+                                messageId: data.messageId
+                            });
+
+                            connectedClients.forEach(client => {
+                                if (client.readyState === WebSocket.OPEN) {
+                                    client.send(messageRejectedNotification);
+                                }
+                            });
+                        }
+                    }
+                    break;
+
+                case 'getMessages':
+                    // Send current queue and published messages to requesting client
+                    ws.send(JSON.stringify({
+                        type: 'messagesData',
+                        queue: messageQueue,
+                        published: publishedMessages
+                    }));
+                    break;
+
+                case 'editorMessage':
+                    if (data.message) {
+                        const editorMessage = {
+                            id: messageIdCounter++,
+                            name: 'Moderator',
+                            message: data.message.trim(),
+                            timestamp: new Date().toISOString(),
+                            isFromEditor: true
+                        };
+
+                        // Broadcast to all participants
+                        const editorMessageNotification = JSON.stringify({
+                            type: 'editorMessageReceived',
+                            message: editorMessage
+                        });
+
+                        connectedClients.forEach(client => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(editorMessageNotification);
+                            }
+                        });
+
+                        console.log(`Editor message sent: ${editorMessage.message}`);
+                    }
                     break;
             }
         } catch (error) {
@@ -242,6 +379,7 @@ server.listen(port, () => {
     console.log(`Participant view: http://localhost:${port}/join`);
     console.log(`Editor view: http://localhost:${port}/editor`);
     console.log(`OBS Browser Source: http://localhost:${port}/source`);
+    console.log(`Messages Feed (OBS): http://localhost:${port}/feed`);
     console.log(`QR Code Display: http://localhost:${port}/qr`);
     console.log('');
     console.log(`WHIP Gateway Base: ${WHIP_GATEWAY_BASE}`);

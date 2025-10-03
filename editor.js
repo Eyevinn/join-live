@@ -34,6 +34,7 @@ class LiveBroadcastEditor {
         this.connectionStatus = document.getElementById('connectionStatus');
         this.refreshBtn = document.getElementById('refreshBtn');
         this.sourceBtn = document.getElementById('sourceBtn');
+        this.feedBtn = document.getElementById('feedBtn');
         this.qrBtn = document.getElementById('qrBtn');
         this.settingsBtn = document.getElementById('settingsBtn');
         this.errorMessage = document.getElementById('errorMessage');
@@ -47,6 +48,12 @@ class LiveBroadcastEditor {
         this.applyGridBtn = document.getElementById('applyGridBtn');
         this.countdownToggle = document.getElementById('countdownToggle');
         this.countdownStatus = document.getElementById('countdownStatus');
+
+        // Messaging elements
+        this.messageQueue = document.getElementById('messageQueue');
+        this.queueCount = document.getElementById('queueCount');
+        this.editorMessageInput = document.getElementById('editorMessageInput');
+        this.sendEditorMessage = document.getElementById('sendEditorMessage');
         
         // Countdown state
         this.countdownEnabled = false;
@@ -56,10 +63,17 @@ class LiveBroadcastEditor {
         // Audio notification settings
         this.audioNotificationsEnabled = localStorage.getItem('audioNotificationsEnabled') === 'true' || localStorage.getItem('audioNotificationsEnabled') === null; // Default to true
         this.notificationAudio = null;
+
+        // Messaging state
+        this.messages = {
+            queue: [],
+            published: []
+        };
         
         this.loadConfiguration();
         this.initializeAudioNotification();
         this.initializeEventListeners();
+        this.initializeMessaging();
         this.initializeWebSocket();
         this.loadSelectedChannel();
         this.startAutoRefresh();
@@ -84,6 +98,7 @@ class LiveBroadcastEditor {
     initializeEventListeners() {
         this.refreshBtn.addEventListener('click', () => this.refreshStreams());
         this.sourceBtn.addEventListener('click', () => this.openSource());
+        this.feedBtn.addEventListener('click', () => this.openFeed());
         this.qrBtn.addEventListener('click', () => this.openQRCode());
         this.settingsBtn.addEventListener('click', () => this.showSettings());
         this.prevPageBtn.addEventListener('click', () => this.previousPage());
@@ -95,6 +110,9 @@ class LiveBroadcastEditor {
         // Audio notification toggle
         const audioNotificationToggle = document.getElementById('audioNotificationToggle');
         audioNotificationToggle.addEventListener('click', () => this.toggleAudioNotifications());
+
+        // Messaging event listeners
+        this.sendEditorMessage.addEventListener('click', () => this.sendMessageToParticipants());
         
         // Close modal when clicking outside
         this.settingsModal.addEventListener('click', (e) => {
@@ -574,6 +592,11 @@ class LiveBroadcastEditor {
         window.open(sourceUrl, '_blank');
     }
     
+    openFeed() {
+        const feedUrl = '/feed';
+        window.open(feedUrl, '_blank');
+    }
+    
     openQRCode() {
         const qrUrl = '/qr';
         window.open(qrUrl, '_blank');
@@ -838,6 +861,22 @@ class LiveBroadcastEditor {
                         // Delay refresh to allow stream cleanup at gateway
                         setTimeout(() => this.refreshStreams(), 2000);
                         break;
+
+                    case 'newMessageInQueue':
+                        this.handleNewMessage(data.message);
+                        break;
+
+                    case 'messageApproved':
+                        this.handleMessageApproved(data.message);
+                        break;
+
+                    case 'messageRejected':
+                        this.handleMessageRejected(data.messageId);
+                        break;
+
+                    case 'messagesData':
+                        this.handleMessagesData(data);
+                        break;
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -879,6 +918,127 @@ class LiveBroadcastEditor {
         });
     }
     
+    // Messaging methods
+    initializeMessaging() {
+        // Request current messages from server
+        setTimeout(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.send(JSON.stringify({ type: 'getMessages' }));
+            }
+        }, 1000);
+    }
+
+    handleNewMessage(message) {
+        this.messages.queue.push(message);
+        this.renderMessageQueue();
+        this.updateQueueCount();
+
+        // Play notification sound for new messages
+        this.playNotificationSound();
+    }
+
+    handleMessageApproved(message) {
+        // Remove from queue and add to published
+        this.messages.queue = this.messages.queue.filter(msg => msg.id !== message.id);
+        this.messages.published.unshift(message);
+        this.renderMessageQueue();
+        this.updateQueueCount();
+    }
+
+    handleMessageRejected(messageId) {
+        // Remove from queue
+        this.messages.queue = this.messages.queue.filter(msg => msg.id !== messageId);
+        this.renderMessageQueue();
+        this.updateQueueCount();
+    }
+
+    handleMessagesData(data) {
+        this.messages.queue = data.queue || [];
+        this.messages.published = data.published || [];
+        this.renderMessageQueue();
+        this.updateQueueCount();
+    }
+
+    renderMessageQueue() {
+        if (this.messages.queue.length === 0) {
+            this.messageQueue.innerHTML = '<div class="no-messages">No messages in queue</div>';
+            return;
+        }
+
+        const html = this.messages.queue.map(message => `
+            <div class="queue-item" data-message-id="${message.id}">
+                <div class="queue-item-header">
+                    <div class="queue-item-name">${this.escapeHtml(message.name)}</div>
+                    <div class="queue-item-time">${new Date(message.timestamp).toLocaleTimeString()}</div>
+                </div>
+                <div class="queue-item-message">${this.escapeHtml(message.message)}</div>
+                <div class="queue-item-actions">
+                    <button class="queue-btn approve" onclick="window.editor.approveMessage(${message.id})">✓ Approve</button>
+                    <button class="queue-btn reject" onclick="window.editor.rejectMessage(${message.id})">✗ Reject</button>
+                </div>
+            </div>
+        `).join('');
+
+        this.messageQueue.innerHTML = html;
+    }
+
+    updateQueueCount() {
+        const count = this.messages.queue.length;
+        if (count > 0) {
+            this.queueCount.textContent = count;
+            this.queueCount.style.display = 'inline-block';
+        } else {
+            this.queueCount.style.display = 'none';
+        }
+    }
+
+    approveMessage(messageId) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'approveMessage',
+                messageId: messageId
+            }));
+        }
+    }
+
+    rejectMessage(messageId) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'rejectMessage',
+                messageId: messageId
+            }));
+        }
+    }
+
+    sendMessageToParticipants() {
+        const message = this.editorMessageInput.value.trim();
+        if (!message) return;
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                type: 'editorMessage',
+                message: message
+            }));
+
+            // Clear input
+            this.editorMessageInput.value = '';
+
+            // Provide feedback
+            this.sendEditorMessage.disabled = true;
+            this.sendEditorMessage.textContent = 'Sent!';
+            setTimeout(() => {
+                this.sendEditorMessage.disabled = false;
+                this.sendEditorMessage.textContent = 'Send to All Participants';
+            }, 2000);
+        }
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
     cleanup() {
         this.stopAutoRefresh();
         

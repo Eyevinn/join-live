@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Published Messages Feed - OBS Source</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: transparent;
+            color: white;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .feed-container {
+            max-width: 800px;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .feed-header {
+            background: rgba(0, 123, 255, 0.9);
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            margin-bottom: 10px;
+            backdrop-filter: blur(10px);
+        }
+
+        .feed-title {
+            font-size: 24px;
+            font-weight: bold;
+            text-align: center;
+            margin: 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .messages-container {
+            max-height: calc(100vh - 120px);
+            overflow: hidden;
+        }
+
+        .message-item {
+            background: rgba(0, 0, 0, 0.8);
+            border-left: 4px solid #28a745;
+            padding: 15px 20px;
+            margin-bottom: 10px;
+            border-radius: 0 8px 8px 0;
+            backdrop-filter: blur(10px);
+            animation: slideIn 0.5s ease-out;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .message-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .message-name {
+            font-weight: bold;
+            color: #4CAF50;
+            font-size: 16px;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+        }
+
+        .message-time {
+            font-size: 12px;
+            color: #ccc;
+            opacity: 0.8;
+        }
+
+        .message-text {
+            font-size: 18px;
+            line-height: 1.5;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+        }
+
+        .no-messages {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 20px;
+            padding: 40px;
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+
+        /* Responsive design for different OBS source sizes */
+        @media (max-width: 600px) {
+            .feed-title {
+                font-size: 20px;
+            }
+
+            .message-text {
+                font-size: 16px;
+            }
+
+            .message-name {
+                font-size: 14px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .feed-header {
+                padding: 10px 15px;
+            }
+
+            .feed-title {
+                font-size: 18px;
+            }
+
+            .message-item {
+                padding: 12px 15px;
+            }
+
+            .message-text {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="feed-container">
+        <div class="feed-header">
+            <h1 class="feed-title">💬 Live Messages</h1>
+        </div>
+
+        <div id="messagesContainer" class="messages-container">
+            <div class="no-messages">No published messages yet</div>
+        </div>
+    </div>
+
+    <script>
+        class MessagesFeed {
+            constructor() {
+                this.messagesContainer = document.getElementById('messagesContainer');
+                this.publishedMessages = [];
+                this.maxMessages = 10; // Maximum number of messages to display
+
+                this.initializeWebSocket();
+            }
+
+            initializeWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
+
+                this.ws = new WebSocket(wsUrl);
+
+                this.ws.onopen = () => {
+                    console.log('Feed WebSocket connected');
+                    // Request current published messages
+                    this.ws.send(JSON.stringify({ type: 'getMessages' }));
+                };
+
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        switch (data.type) {
+                            case 'messageApproved':
+                                this.addMessage(data.message);
+                                break;
+
+                            case 'messagesData':
+                                this.loadMessages(data.published || []);
+                                break;
+                        }
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+
+                this.ws.onclose = () => {
+                    console.log('Feed WebSocket disconnected');
+                    // Attempt to reconnect after 3 seconds
+                    setTimeout(() => {
+                        this.initializeWebSocket();
+                    }, 3000);
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('Feed WebSocket error:', error);
+                };
+            }
+
+            loadMessages(messages) {
+                this.publishedMessages = messages.slice(0, this.maxMessages);
+                this.renderMessages();
+            }
+
+            addMessage(message) {
+                // Add to the beginning of the array
+                this.publishedMessages.unshift(message);
+
+                // Keep only the most recent messages
+                if (this.publishedMessages.length > this.maxMessages) {
+                    this.publishedMessages = this.publishedMessages.slice(0, this.maxMessages);
+                }
+
+                this.renderMessages();
+            }
+
+            renderMessages() {
+                if (this.publishedMessages.length === 0) {
+                    this.messagesContainer.innerHTML = '<div class="no-messages">No published messages yet</div>';
+                    return;
+                }
+
+                const html = this.publishedMessages.map(message => `
+                    <div class="message-item">
+                        <div class="message-header">
+                            <div class="message-name">${this.escapeHtml(message.name)}</div>
+                            <div class="message-time">${new Date(message.approvedAt || message.timestamp).toLocaleTimeString()}</div>
+                        </div>
+                        <div class="message-text">${this.escapeHtml(message.message)}</div>
+                    </div>
+                `).join('');
+
+                this.messagesContainer.innerHTML = html;
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+        }
+
+        // Initialize the feed when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.messagesFeed = new MessagesFeed();
+        });
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (window.messagesFeed && window.messagesFeed.ws) {
+                window.messagesFeed.ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
