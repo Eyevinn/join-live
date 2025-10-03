@@ -331,8 +331,7 @@ class JoinLiveApp {
         if (data.success) {
             this.showStatus('Message submitted! It will be reviewed by the moderator.', 'success');
 
-            // Clear the form
-            document.getElementById('participantName').value = '';
+            // Clear only the message, keep the name
             document.getElementById('participantMessage').value = '';
         } else {
             this.showStatus(`Error: ${data.error || 'Failed to submit message'}`, 'error');
