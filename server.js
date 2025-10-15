@@ -128,6 +128,11 @@ wss.on('connection', (ws) => {
                     selectedChannelIds = []; // Clear multi-selection too
                     console.log('Channel deselected');
                     
+                    // Send unpairing message to all participants
+                    const unpairMessage = JSON.stringify({
+                        type: 'participantUnpaired'
+                    });
+                    
                     // Broadcast to all connected clients
                     const deselectMessage = JSON.stringify({
                         type: 'channelDeselected'
@@ -135,6 +140,7 @@ wss.on('connection', (ws) => {
                     
                     connectedClients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
+                            client.send(unpairMessage);
                             client.send(deselectMessage);
                         }
                     });
@@ -144,6 +150,35 @@ wss.on('connection', (ws) => {
                     selectedChannelIds = data.channelIds || [];
                     selectedChannelId = null; // Clear single selection
                     console.log(`Multiple channels selected: ${selectedChannelIds.join(', ')}`);
+                    
+                    // Send pairing information to each participant
+                    if (selectedChannelIds.length === 2) {
+                        const [participant1, participant2] = selectedChannelIds;
+                        
+                        // Send to first participant about second participant
+                        const pairMessage1 = JSON.stringify({
+                            type: 'participantPaired',
+                            yourChannelId: participant1,
+                            partnerChannelId: participant2,
+                            isMultiParticipant: true
+                        });
+                        
+                        // Send to second participant about first participant  
+                        const pairMessage2 = JSON.stringify({
+                            type: 'participantPaired',
+                            yourChannelId: participant2,
+                            partnerChannelId: participant1,
+                            isMultiParticipant: true
+                        });
+                        
+                        // Broadcast to all clients about the multi-selection
+                        connectedClients.forEach(client => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(pairMessage1);
+                                client.send(pairMessage2);
+                            }
+                        });
+                    }
                     
                     // Broadcast to all connected clients
                     const multiSelectMessage = JSON.stringify({

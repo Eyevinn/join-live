@@ -26,20 +26,72 @@
             margin-bottom: 30px;
         }
         
-        .video-container {
+        .video-layout {
             position: relative;
             width: 100%;
             max-width: 640px;
             margin: 0 auto 30px;
+        }
+        
+        .main-video-container {
+            position: relative;
+            width: 100%;
             background: #000;
             border-radius: 8px;
             overflow: hidden;
+            aspect-ratio: 16/9;
         }
         
-        #localVideo {
+        .main-video-container video {
             width: 100%;
-            height: auto;
+            height: 100%;
+            object-fit: cover;
             display: block;
+        }
+        
+        .self-preview-container {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 160px;
+            height: 90px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 20;
+        }
+        
+        .self-preview-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        
+        .preview-label {
+            position: absolute;
+            bottom: 4px;
+            left: 4px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: bold;
+        }
+        
+        .partner-label {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            background: rgba(0, 123, 255, 0.9);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 10;
         }
         
         .controls {
@@ -450,11 +502,24 @@
             </div>
         </div>
 
-        <div class="video-container">
-            <video id="localVideo" autoplay muted playsinline></video>
-            <div id="onAirIndicator" class="on-air-indicator">
-                <div class="on-air-dot"></div>
-                <span class="on-air-text">ON AIR</span>
+        <div id="videoLayout" class="video-layout">
+            <!-- Main video area for partner or self-preview -->
+            <div id="mainVideoContainer" class="main-video-container">
+                <video id="partnerVideo" autoplay playsinline style="display: none;"></video>
+                <video id="localVideo" autoplay muted playsinline></video>
+                <div id="onAirIndicator" class="on-air-indicator">
+                    <div class="on-air-dot"></div>
+                    <span class="on-air-text">ON AIR</span>
+                </div>
+                <div id="partnerLabel" class="partner-label" style="display: none;">
+                    <span>Partner</span>
+                </div>
+            </div>
+            
+            <!-- Small self-preview when partner is shown -->
+            <div id="selfPreviewContainer" class="self-preview-container" style="display: none;">
+                <video id="selfPreviewVideo" autoplay muted playsinline></video>
+                <div class="preview-label">You</div>
             </div>
         </div>
         

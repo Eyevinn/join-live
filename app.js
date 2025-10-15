@@ -22,8 +22,15 @@ class JoinLiveApp {
         this.whipClient = null;
         this.isStreaming = false;
         this.channelId = null;
+        this.partnerChannelId = null;
+        this.partnerPlayer = null;
+        this.isPartnered = false;
         
         this.localVideo = document.getElementById('localVideo');
+        this.partnerVideo = document.getElementById('partnerVideo');
+        this.selfPreviewVideo = document.getElementById('selfPreviewVideo');
+        this.selfPreviewContainer = document.getElementById('selfPreviewContainer');
+        this.partnerLabel = document.getElementById('partnerLabel');
         this.startCameraBtn = document.getElementById('startCameraBtn');
         this.joinLiveBtn = document.getElementById('joinLiveBtn');
         this.stopStreamBtn = document.getElementById('stopStreamBtn');
@@ -261,6 +268,14 @@ class JoinLiveApp {
                     case 'editorMessageReceived':
                         this.displayEditorMessage(data.message);
                         break;
+                        
+                    case 'participantPaired':
+                        this.handleParticipantPaired(data);
+                        break;
+                        
+                    case 'participantUnpaired':
+                        this.handleParticipantUnpaired();
+                        break;
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -397,9 +412,168 @@ class JoinLiveApp {
         if (this.whipClient) {
             this.whipClient.destroy();
         }
+        if (this.partnerPlayer) {
+            this.partnerPlayer.destroy();
+        }
         if (this.ws) {
             this.ws.close();
         }
+    }
+    
+    async handleParticipantPaired(data) {
+        // Only handle pairing if this participant is involved
+        if (data.yourChannelId !== this.channelId) {
+            return;
+        }
+        
+        console.log(`Paired with participant: ${data.partnerChannelId}`);
+        this.partnerChannelId = data.partnerChannelId;
+        this.isPartnered = true;
+        
+        // Switch to partner view
+        await this.switchToPartnerView();
+    }
+    
+    handleParticipantUnpaired() {
+        console.log('Participant unpaired');
+        this.partnerChannelId = null;
+        this.isPartnered = false;
+        
+        // Switch back to self view
+        this.switchToSelfView();
+    }
+    
+    async switchToPartnerView() {
+        try {
+            // Hide local video in main container, show partner video
+            this.localVideo.style.display = 'none';
+            this.partnerVideo.style.display = 'block';
+            this.partnerLabel.style.display = 'block';
+            
+            // Show self-preview with local stream
+            this.selfPreviewContainer.style.display = 'block';
+            this.selfPreviewVideo.srcObject = this.localStream;
+            
+            // Load partner's stream into main video
+            await this.loadPartnerStream();
+            
+        } catch (error) {
+            console.error('Error switching to partner view:', error);
+        }
+    }
+    
+    switchToSelfView() {
+        // Clean up partner stream
+        if (this.partnerPlayer) {
+            this.partnerPlayer.destroy();
+            this.partnerPlayer = null;
+        }
+        
+        // Hide partner elements
+        this.partnerVideo.style.display = 'none';
+        this.partnerLabel.style.display = 'none';
+        this.selfPreviewContainer.style.display = 'none';
+        
+        // Show local video in main container
+        this.localVideo.style.display = 'block';
+        this.localVideo.srcObject = this.localStream;
+    }
+    
+    async loadPartnerStream() {
+        try {
+            // Load WebRTCPlayer from CDN
+            if (!window.WebRTCPlayer) {
+                await this.loadWebRTCPlayer();
+            }
+            
+            // Get partner stream info
+            const streamInfo = await this.getStreamInfo(this.partnerChannelId);
+            if (!streamInfo) {
+                throw new Error(`Partner stream ${this.partnerChannelId} not found`);
+            }
+            
+            // Construct WHEP playback URL
+            const whepGatewayUrl = window.WHEP_GATEWAY_URL || 'https://livevibe.osaas.io';
+            let whepPlaybackUrl;
+            if (streamInfo.resource) {
+                whepPlaybackUrl = `${whepGatewayUrl}${streamInfo.resource}`;
+            } else {
+                whepPlaybackUrl = `${whepGatewayUrl}/whep/${this.partnerChannelId}`;
+            }
+            
+            console.log(`Loading partner stream from: ${whepPlaybackUrl}`);
+            
+            // Create WebRTC player for partner
+            this.partnerPlayer = new window.WebRTCPlayer({
+                video: this.partnerVideo,
+                type: 'whep'
+            });
+            
+            // Handle player events
+            this.partnerPlayer.on('connected', () => {
+                console.log('Partner stream connected');
+            });
+            
+            this.partnerPlayer.on('error', (error) => {
+                console.error('Partner stream error:', error);
+            });
+            
+            // Start playback
+            await this.partnerPlayer.load(new URL(whepPlaybackUrl));
+            
+        } catch (error) {
+            console.error('Failed to load partner stream:', error);
+        }
+    }
+    
+    async getStreamInfo(channelId) {
+        const whepGatewayUrl = window.WHEP_GATEWAY_URL || 'https://livevibe.osaas.io';
+        const whepChannelEndpoint = whepGatewayUrl + '/whep/channel';
+        
+        try {
+            const response = await fetch(whepChannelEndpoint, {
+                method: 'GET',
+                headers: {
+                    'Authorization': window.WHEP_AUTH_KEY || '',
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const streams = await response.json();
+            return streams.find(stream => stream.channelId === channelId);
+        } catch (error) {
+            console.error('Error fetching stream info:', error);
+            return null;
+        }
+    }
+    
+    async loadWebRTCPlayer() {
+        const cdnUrls = [
+            'https://cdn.skypack.dev/@eyevinn/webrtc-player',
+            'https://unpkg.com/@eyevinn/webrtc-player/dist/main.js?module'
+        ];
+        
+        for (const url of cdnUrls) {
+            try {
+                console.log(`Trying to load WebRTCPlayer from: ${url}`);
+                const module = await import(url);
+                const WebRTCPlayer = module.WebRTCPlayer || module.default?.WebRTCPlayer;
+                
+                if (WebRTCPlayer) {
+                    window.WebRTCPlayer = WebRTCPlayer;
+                    console.log('WebRTCPlayer loaded successfully from:', url);
+                    return;
+                }
+            } catch (error) {
+                console.warn(`Failed to load from ${url}:`, error);
+            }
+        }
+        
+        throw new Error('Failed to load WebRTCPlayer from all CDN sources');
     }
 }
 
