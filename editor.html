@@ -78,6 +78,16 @@
             background-color: #545b62;
         }
         
+        .btn-secondary.untake-btn {
+            background-color: #dc3545;
+            border-color: #dc3545;
+        }
+        
+        .btn-secondary.untake-btn:hover {
+            background-color: #c82333;
+            border-color: #bd2130;
+        }
+        
         .status {
             font-size: 14px;
             padding: 5px 10px;
@@ -460,6 +470,61 @@
             display: flex;
         }
         
+        .stream-tile.multi-selected {
+            border-color: #17a2b8;
+            box-shadow: 0 0 20px rgba(23, 162, 184, 0.7);
+        }
+        
+        .multi-selected-indicator {
+            display: none;
+            align-items: center;
+            gap: 4px;
+            font-size: 9px;
+            font-weight: bold;
+            color: #fff;
+            background: #17a2b8;
+            padding: 2px 6px;
+            border-radius: 8px;
+            box-shadow: 0 0 8px rgba(23, 162, 184, 0.6);
+            animation: selectedPulse 2s ease-in-out infinite;
+            width: fit-content;
+        }
+        
+        .selected-dot {
+            width: 6px;
+            height: 6px;
+            background: #fff;
+            border-radius: 50%;
+            animation: selectedBlink 1s ease-in-out infinite alternate;
+        }
+        
+        .selected-text {
+            font-size: 8px;
+            letter-spacing: 0.3px;
+        }
+        
+        @keyframes selectedPulse {
+            0%, 100% { 
+                box-shadow: 0 0 10px rgba(23, 162, 184, 0.6);
+            }
+            50% { 
+                box-shadow: 0 0 20px rgba(23, 162, 184, 0.9);
+            }
+        }
+        
+        @keyframes selectedBlink {
+            0% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+        
+        .stream-tile.multi-selected .selection-text {
+            display: none;
+        }
+        
+        .stream-tile.multi-selected .multi-selected-indicator {
+            display: flex;
+        }
+        
         .stream-tile {
             cursor: pointer;
         }
@@ -736,6 +801,7 @@
                 </div>
                 <span id="countdownStatus" class="countdown-status">Take</span>
             </div>
+            <button id="takeBtn" class="btn btn-primary" style="display: none;">Take Selected</button>
             <button id="refreshBtn" class="btn btn-primary">Refresh Streams</button>
             <button id="sourceBtn" class="btn btn-secondary">Video Output</button>
             <button id="feedBtn" class="btn btn-secondary">Messages Feed</button>

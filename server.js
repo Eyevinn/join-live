@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const WebSocket = require('ws');
@@ -72,6 +74,7 @@ app.get('/feed', (req, res) => {
 
 // WebSocket state management
 let selectedChannelId = null;
+let selectedChannelIds = []; // Track multiple selected channels for side-by-side
 const connectedClients = new Set();
 const participantChannels = new Set(); // Track active participant channels
 
@@ -90,6 +93,11 @@ wss.on('connection', (ws) => {
         ws.send(JSON.stringify({
             type: 'channelSelected',
             channelId: selectedChannelId
+        }));
+    } else if (selectedChannelIds.length > 0) {
+        ws.send(JSON.stringify({
+            type: 'multipleChannelsSelected',
+            channelIds: selectedChannelIds
         }));
     }
     
@@ -117,7 +125,13 @@ wss.on('connection', (ws) => {
                     
                 case 'deselectChannel':
                     selectedChannelId = null;
+                    selectedChannelIds = []; // Clear multi-selection too
                     console.log('Channel deselected');
+                    
+                    // Send unpairing message to all participants
+                    const unpairMessage = JSON.stringify({
+                        type: 'participantUnpaired'
+                    });
                     
                     // Broadcast to all connected clients
                     const deselectMessage = JSON.stringify({
@@ -126,7 +140,55 @@ wss.on('connection', (ws) => {
                     
                     connectedClients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
+                            client.send(unpairMessage);
                             client.send(deselectMessage);
+                        }
+                    });
+                    break;
+                    
+                case 'selectMultipleChannels':
+                    selectedChannelIds = data.channelIds || [];
+                    selectedChannelId = null; // Clear single selection
+                    console.log(`Multiple channels selected: ${selectedChannelIds.join(', ')}`);
+                    
+                    // Send pairing information to each participant
+                    if (selectedChannelIds.length === 2) {
+                        const [participant1, participant2] = selectedChannelIds;
+                        
+                        // Send to first participant about second participant
+                        const pairMessage1 = JSON.stringify({
+                            type: 'participantPaired',
+                            yourChannelId: participant1,
+                            partnerChannelId: participant2,
+                            isMultiParticipant: true
+                        });
+                        
+                        // Send to second participant about first participant  
+                        const pairMessage2 = JSON.stringify({
+                            type: 'participantPaired',
+                            yourChannelId: participant2,
+                            partnerChannelId: participant1,
+                            isMultiParticipant: true
+                        });
+                        
+                        // Broadcast to all clients about the multi-selection
+                        connectedClients.forEach(client => {
+                            if (client.readyState === WebSocket.OPEN) {
+                                client.send(pairMessage1);
+                                client.send(pairMessage2);
+                            }
+                        });
+                    }
+                    
+                    // Broadcast to all connected clients
+                    const multiSelectMessage = JSON.stringify({
+                        type: 'multipleChannelsSelected',
+                        channelIds: selectedChannelIds
+                    });
+                    
+                    connectedClients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(multiSelectMessage);
                         }
                     });
                     break;
@@ -200,17 +262,43 @@ wss.on('connection', (ws) => {
                     });
                     break;
                     
-                case 'countdownUpdate':
-                    // Broadcast countdown update to all connected clients
-                    const countdownUpdateMessage = JSON.stringify({
-                        type: 'countdownUpdate',
-                        channelId: data.channelId,
+                case 'startMultiCountdown':
+                    console.log(`Starting multi-countdown for channels: ${data.channelIds.join(', ')}`);
+                    
+                    // Broadcast multi-countdown start to all connected clients
+                    const multiCountdownStartMessage = JSON.stringify({
+                        type: 'multiCountdownStart',
+                        channelIds: data.channelIds,
                         seconds: data.seconds
                     });
                     
                     connectedClients.forEach(client => {
                         if (client.readyState === WebSocket.OPEN) {
-                            client.send(countdownUpdateMessage);
+                            client.send(multiCountdownStartMessage);
+                        }
+                    });
+                    break;
+                    
+                case 'countdownUpdate':
+                    // Handle both single and multi countdown updates
+                    let updateMessage;
+                    if (data.channelIds) {
+                        updateMessage = JSON.stringify({
+                            type: 'multiCountdownUpdate',
+                            channelIds: data.channelIds,
+                            seconds: data.seconds
+                        });
+                    } else {
+                        updateMessage = JSON.stringify({
+                            type: 'countdownUpdate',
+                            channelId: data.channelId,
+                            seconds: data.seconds
+                        });
+                    }
+                    
+                    connectedClients.forEach(client => {
+                        if (client.readyState === WebSocket.OPEN) {
+                            client.send(updateMessage);
                         }
                     });
                     break;

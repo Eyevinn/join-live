@@ -23,6 +23,8 @@ class LiveBroadcastEditor {
         this.refreshInterval = null;
         this.isConnected = false;
         this.selectedChannelId = null;
+        this.selectedChannels = new Set(); // Track multiple selected channels
+        this.onAirChannels = []; // Track channels currently on air (for side-by-side)
         this.allStreams = [];
         this.currentPage = 0;
         this.gridColumns = 4;
@@ -48,6 +50,7 @@ class LiveBroadcastEditor {
         this.applyGridBtn = document.getElementById('applyGridBtn');
         this.countdownToggle = document.getElementById('countdownToggle');
         this.countdownStatus = document.getElementById('countdownStatus');
+        this.takeBtn = document.getElementById('takeBtn');
 
         // Messaging elements
         this.messageQueue = document.getElementById('messageQueue');
@@ -106,6 +109,11 @@ class LiveBroadcastEditor {
         this.closeModalBtn.addEventListener('click', () => this.hideSettings());
         this.applyGridBtn.addEventListener('click', () => this.applyGridSettings());
         this.countdownToggle.addEventListener('click', () => this.toggleCountdown());
+        
+        // Take button for multi-selection
+        if (this.takeBtn) {
+            this.takeBtn.addEventListener('click', () => this.takeSelectedParticipants());
+        }
         
         // Audio notification toggle
         const audioNotificationToggle = document.getElementById('audioNotificationToggle');
@@ -390,10 +398,14 @@ class LiveBroadcastEditor {
                 </div>
                 <div class="stream-selection">
                     <div class="selection-indicator">
-                        <span class="selection-text">Press ${streamNumber} or click to put on air</span>
+                        <span class="selection-text">Press ${streamNumber} or shift+click to select</span>
                         <span class="on-air-indicator">
                             <span class="on-air-dot"></span>
                             <span class="on-air-text">ON AIR</span>
+                        </span>
+                        <span class="multi-selected-indicator">
+                            <span class="selected-dot"></span>
+                            <span class="selected-text">SELECTED</span>
                         </span>
                     </div>
                 </div>
@@ -404,8 +416,8 @@ class LiveBroadcastEditor {
             </div>
         `;
         
-        // Add click handler for selection
-        tile.addEventListener('click', () => this.selectStream(streamId));
+        // Add click handler for selection (with shift-click support for multi-select)
+        tile.addEventListener('click', (event) => this.selectStream(streamId, event.shiftKey));
         
         return tile;
     }
@@ -710,9 +722,39 @@ class LiveBroadcastEditor {
         }
     }
     
-    selectStream(streamId) {
-        console.log(`Selecting stream: ${streamId}`);
+    selectStream(streamId, isMultiSelect = false) {
+        console.log(`Selecting stream: ${streamId}, multi-select: ${isMultiSelect}`);
         
+        if (isMultiSelect) {
+            // Multi-select mode: toggle selection in selectedChannels set
+            if (this.selectedChannels.has(streamId)) {
+                // Deselect from multi-selection
+                this.selectedChannels.delete(streamId);
+                const tile = document.getElementById(`tile-${streamId}`);
+                if (tile) {
+                    tile.classList.remove('multi-selected');
+                }
+                console.log(`Stream ${streamId} removed from selection`);
+            } else {
+                // Add to multi-selection (max 2 participants)
+                if (this.selectedChannels.size >= 2) {
+                    this.showError('Maximum 2 participants can be selected for side-by-side display');
+                    return;
+                }
+                this.selectedChannels.add(streamId);
+                const tile = document.getElementById(`tile-${streamId}`);
+                if (tile) {
+                    tile.classList.add('multi-selected');
+                }
+                console.log(`Stream ${streamId} added to selection (${this.selectedChannels.size}/2)`);
+            }
+            
+            // Update Take button visibility
+            this.updateTakeButtonVisibility();
+            return;
+        }
+        
+        // Single select mode (existing behavior)
         // Check if this stream is already selected
         if (this.selectedChannelId === streamId) {
             // Deselect - take off air
@@ -724,6 +766,7 @@ class LiveBroadcastEditor {
             }
             
             this.selectedChannelId = null;
+            this.onAirChannels = []; // Clear on-air state
             this.sendWebSocketMessage({
                 type: 'deselectChannel'
             });
@@ -739,6 +782,9 @@ class LiveBroadcastEditor {
                 });
                 this.pendingSelection = null;
             }
+            
+            // Update button visibility
+            this.updateTakeButtonVisibility();
             
             return;
         }
@@ -821,6 +867,191 @@ class LiveBroadcastEditor {
         });
         
         console.log(`Stream ${streamId} is now ON AIR`);
+        
+        // Update on-air state for single selection
+        this.onAirChannels = [streamId];
+        this.updateTakeButtonVisibility();
+    }
+    
+    updateTakeButtonVisibility() {
+        if (!this.takeBtn) return;
+        
+        // Check if we have participants currently on air (single or multiple)
+        if (this.onAirChannels.length >= 1 && this.selectedChannels.size === 0) {
+            this.takeBtn.style.display = 'inline-block';
+            const participantText = this.onAirChannels.length > 1 ? 'Participants' : 'Participant';
+            this.takeBtn.textContent = `Untake ${participantText} (Go Off Air)`;
+            this.takeBtn.classList.remove('btn-primary');
+            this.takeBtn.classList.add('btn-secondary', 'untake-btn');
+        } else if (this.selectedChannels.size === 2) {
+            this.takeBtn.style.display = 'inline-block';
+            this.takeBtn.textContent = 'Take Selected (Side-by-Side)';
+            this.takeBtn.classList.remove('btn-secondary', 'untake-btn');
+            this.takeBtn.classList.add('btn-primary');
+        } else if (this.selectedChannels.size === 1) {
+            this.takeBtn.style.display = 'inline-block';
+            this.takeBtn.textContent = 'Take Selected (Single)';
+            this.takeBtn.classList.remove('btn-secondary', 'untake-btn');
+            this.takeBtn.classList.add('btn-primary');
+        } else {
+            this.takeBtn.style.display = 'none';
+            this.takeBtn.classList.remove('btn-secondary', 'untake-btn');
+        }
+    }
+    
+    takeSelectedParticipants() {
+        // Check if we're in untake mode (participants currently on air)
+        if (this.onAirChannels.length >= 1 && this.selectedChannels.size === 0) {
+            this.untakeParticipants();
+            return;
+        }
+        
+        if (this.selectedChannels.size === 0) {
+            this.showError('No participants selected');
+            return;
+        }
+        
+        const selectedArray = Array.from(this.selectedChannels);
+        console.log(`Taking selected participants: ${selectedArray.join(', ')}`);
+        
+        // Cancel any existing countdown
+        if (this.countdownTimer) {
+            clearTimeout(this.countdownTimer);
+            this.countdownTimer = null;
+        }
+        if (this.pendingSelection) {
+            this.sendWebSocketMessage({
+                type: 'cancelCountdown'
+            });
+            this.pendingSelection = null;
+        }
+        
+        if (selectedArray.length === 1) {
+            // Single participant selected - use regular single selection
+            if (this.countdownEnabled) {
+                this.pendingSelection = selectedArray[0];
+                this.startCountdown(selectedArray[0]);
+            } else {
+                this.actuallySelectStream(selectedArray[0]);
+            }
+        } else {
+            // Multiple participants - use multi-selection
+            if (this.countdownEnabled) {
+                this.pendingMultiSelection = selectedArray;
+                this.startMultiCountdown(selectedArray);
+            } else {
+                this.actuallySelectMultipleStreams(selectedArray);
+            }
+        }
+    }
+    
+    startMultiCountdown(channelIds) {
+        console.log(`Starting countdown for multiple streams: ${channelIds.join(', ')}`);
+        
+        // Send countdown start message to participants
+        this.sendWebSocketMessage({
+            type: 'startMultiCountdown',
+            channelIds: channelIds,
+            seconds: 5
+        });
+        
+        // Start the countdown timer
+        let timeLeft = 5;
+        const countdownInterval = setInterval(() => {
+            timeLeft--;
+            
+            if (timeLeft > 0) {
+                // Update countdown message
+                this.sendWebSocketMessage({
+                    type: 'countdownUpdate',
+                    channelIds: channelIds,
+                    seconds: timeLeft
+                });
+            } else {
+                // Countdown finished, actually select the streams
+                clearInterval(countdownInterval);
+                this.countdownTimer = null;
+                this.pendingMultiSelection = null;
+                this.actuallySelectMultipleStreams(channelIds);
+            }
+        }, 1000);
+        
+        this.countdownTimer = countdownInterval;
+    }
+    
+    actuallySelectMultipleStreams(channelIds) {
+        console.log(`Actually selecting multiple streams: ${channelIds.join(', ')}`);
+        
+        // Clear previous single selection
+        const previousSelected = document.querySelector('.stream-tile.selected');
+        if (previousSelected) {
+            previousSelected.classList.remove('selected');
+        }
+        this.selectedChannelId = null;
+        
+        // Clear multi-selected visual state and add to on-air state
+        this.selectedChannels.forEach(channelId => {
+            const tile = document.getElementById(`tile-${channelId}`);
+            if (tile) {
+                tile.classList.remove('multi-selected');
+                tile.classList.add('selected');
+            }
+        });
+        
+        // Send WebSocket message for multi-selection
+        this.sendWebSocketMessage({
+            type: 'selectMultipleChannels',
+            channelIds: channelIds
+        });
+        
+        // Clear selection set and hide Take button
+        this.selectedChannels.clear();
+        this.updateTakeButtonVisibility();
+        
+        console.log(`Streams ${channelIds.join(', ')} are now ON AIR (side-by-side)`);
+        
+        // Update on-air state
+        this.onAirChannels = channelIds;
+        this.updateTakeButtonVisibility();
+    }
+    
+    untakeParticipants() {
+        console.log(`Untaking participants: ${this.onAirChannels.join(', ')}`);
+        
+        // Cancel any existing countdown
+        if (this.countdownTimer) {
+            clearTimeout(this.countdownTimer);
+            this.countdownTimer = null;
+        }
+        if (this.pendingSelection || this.pendingMultiSelection) {
+            this.sendWebSocketMessage({
+                type: 'cancelCountdown'
+            });
+            this.pendingSelection = null;
+            this.pendingMultiSelection = null;
+        }
+        
+        // Clear all on-air participants
+        this.onAirChannels.forEach(channelId => {
+            const tile = document.getElementById(`tile-${channelId}`);
+            if (tile) {
+                tile.classList.remove('selected');
+            }
+        });
+        
+        // Send WebSocket message to untake all participants
+        this.sendWebSocketMessage({
+            type: 'deselectChannel'
+        });
+        
+        // Clear on-air state
+        this.onAirChannels = [];
+        this.selectedChannelId = null;
+        
+        // Update button visibility
+        this.updateTakeButtonVisibility();
+        
+        console.log('All participants taken off air');
     }
     
     initializeWebSocket() {
@@ -840,12 +1071,24 @@ class LiveBroadcastEditor {
                 switch (data.type) {
                     case 'channelSelected':
                         this.selectedChannelId = data.channelId;
+                        this.onAirChannels = data.channelId ? [data.channelId] : [];
                         this.updateStreamTiles();
+                        this.updateTakeButtonVisibility();
+                        break;
+                        
+                    case 'multipleChannelsSelected':
+                        // Server confirmed multi-selection
+                        this.selectedChannelId = null;
+                        this.onAirChannels = data.channelIds || [];
+                        this.updateStreamTiles();
+                        this.updateTakeButtonVisibility();
                         break;
                         
                     case 'channelDeselected':
                         this.selectedChannelId = null;
+                        this.onAirChannels = [];
                         this.updateStreamTiles();
+                        this.updateTakeButtonVisibility();
                         break;
                         
                     case 'participantJoined':
