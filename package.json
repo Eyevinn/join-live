@@ -16,6 +16,7 @@
   "dependencies": {
     "@eyevinn/webrtc-player": "^0.13.0",
     "@eyevinn/whip-web-client": "^0.4.0",
+    "dotenv": "^17.2.3",
     "express": "^4.18.2",
     "ws": "^8.18.3"
   },

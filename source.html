@@ -29,6 +29,41 @@
             height: 100%;
             object-fit: cover;
             background: #000000;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        .video-container.side-by-side {
+            display: flex;
+            flex-direction: row;
+            align-items: stretch;
+        }
+        
+        .video-container.side-by-side .stream-video {
+            width: 50%;
+            height: 100%;
+            position: relative;
+            display: block !important;
+            flex: 1;
+        }
+        
+        .video-container.side-by-side .stream-video:first-child {
+            border-right: 1px solid #333;
+        }
+        
+        #streamVideo2 {
+            display: none;
+        }
+        
+        .video-container.side-by-side #streamVideo2 {
+            display: block !important;
+        }
+        
+        .video-divider {
+            width: 2px;
+            background: #333;
+            flex-shrink: 0;
         }
         
         .overlay {
@@ -138,8 +173,9 @@
     </style>
 </head>
 <body>
-    <div class="video-container">
-        <video id="streamVideo" class="stream-video" autoplay playsinline></video>
+    <div id="videoContainer" class="video-container">
+        <video id="streamVideo" class="stream-video" autoplay playsinline muted></video>
+        <video id="streamVideo2" class="stream-video" autoplay playsinline muted></video>
         <div id="overlay" class="overlay"></div>
         <div id="unmutePrompt" class="unmute-prompt" style="display: none;">
             <button id="unmuteBtn" class="unmute-btn">🔊 Click to Enable Audio</button>
@@ -162,8 +198,12 @@
         class OBSBrowserSource {
             constructor() {
                 this.currentPlayer = null;
+                this.currentPlayer2 = null;
                 this.currentChannelId = null;
+                this.currentChannelIds = [];
+                this.videoContainer = document.getElementById('videoContainer');
                 this.videoElement = document.getElementById('streamVideo');
+                this.videoElement2 = document.getElementById('streamVideo2');
                 this.overlay = document.getElementById('overlay');
                 this.status = document.getElementById('status');
                 this.unmutePrompt = document.getElementById('unmutePrompt');
@@ -206,6 +246,12 @@
                                 }
                                 break;
                                 
+                            case 'multipleChannelsSelected':
+                                if (data.channelIds && data.channelIds.length > 0) {
+                                    this.switchToMultipleStreams(data.channelIds);
+                                }
+                                break;
+                                
                             case 'channelDeselected':
                                 this.clearStream();
                                 break;
@@ -228,17 +274,77 @@
                 };
             }
             
+            async switchToMultipleStreams(channelIds) {
+                console.log(`Switching to multiple streams: ${channelIds.join(', ')}`);
+
+                // If only one channel, use single stream mode
+                if (channelIds.length === 1) {
+                    return this.switchToStream(channelIds[0]);
+                }
+
+                // Hide QR code when switching to streams
+                this.hideQRCode();
+
+                // Clean up existing players
+                if (this.currentPlayer) {
+                    this.currentPlayer.destroy();
+                    this.currentPlayer = null;
+                }
+                if (this.currentPlayer2) {
+                    this.currentPlayer2.destroy();
+                    this.currentPlayer2 = null;
+                }
+
+                // Clear single stream state
+                this.currentChannelId = null;
+                this.currentChannelIds = channelIds;
+
+                // Switch to side-by-side layout only for 2+ streams
+                this.videoContainer.classList.add('side-by-side');
+                
+                console.log('Side-by-side layout applied:', {
+                    containerClass: this.videoContainer.className,
+                    hasMultipleChannels: channelIds.length
+                });
+
+                this.updateOverlay(`${channelIds.length} participants`);
+                this.showStatus('loading', 'Loading streams...');
+
+                try {
+                    // Load first stream
+                    if (channelIds[0]) {
+                        await this.loadStreamToVideo(channelIds[0], this.videoElement, 'currentPlayer');
+                    }
+                    
+                    // Load second stream if available
+                    if (channelIds[1]) {
+                        await this.loadStreamToVideo(channelIds[1], this.videoElement2, 'currentPlayer2');
+                    }
+                } catch (error) {
+                    console.error('Failed to load multiple streams:', error);
+                    this.showStatus('error', `Failed to load streams: ${error.message}`);
+                }
+            }
+            
             async switchToStream(channelId) {
                 console.log(`Switching to stream: ${channelId}`);
 
                 // Hide QR code when switching to stream
                 this.hideQRCode();
 
-                // Clean up existing player
+                // Clean up existing players
                 if (this.currentPlayer) {
                     this.currentPlayer.destroy();
                     this.currentPlayer = null;
                 }
+                if (this.currentPlayer2) {
+                    this.currentPlayer2.destroy();
+                    this.currentPlayer2 = null;
+                }
+
+                // Reset to single stream layout
+                this.videoContainer.classList.remove('side-by-side');
+                this.currentChannelIds = [];
 
                 this.currentChannelId = channelId;
                 this.updateOverlay(channelId);
@@ -325,6 +431,86 @@
                 await this.currentPlayer.load(new URL(whepPlaybackUrl));
             }
             
+            async loadStreamToVideo(channelId, videoElement, playerProperty) {
+                console.log(`Starting to load stream ${channelId} to ${playerProperty}`, {
+                    videoElementId: videoElement.id,
+                    videoElementDisplay: window.getComputedStyle(videoElement).display
+                });
+                
+                // First, get the stream info from the WHEP channel endpoint
+                const streamInfo = await this.getStreamInfo(channelId);
+                
+                if (!streamInfo) {
+                    throw new Error(`Stream ${channelId} not found`);
+                }
+                
+                // Construct WHEP playback URL
+                let whepPlaybackUrl;
+                if (streamInfo.resource) {
+                    whepPlaybackUrl = `${this.whepGatewayUrl}${streamInfo.resource}`;
+                } else {
+                    whepPlaybackUrl = `${this.whepGatewayUrl}/whep/${channelId}`;
+                }
+                
+                console.log(`Loading stream ${channelId} from: ${whepPlaybackUrl} to ${playerProperty}`);
+                
+                // Load WebRTCPlayer from CDN
+                if (!window.WebRTCPlayer) {
+                    await this.loadWebRTCPlayer();
+                }
+                
+                // Create new player
+                const player = new window.WebRTCPlayer({
+                    video: videoElement,
+                    type: 'whep'
+                });
+                
+                // Store player reference
+                this[playerProperty] = player;
+                
+                // Handle player events
+                player.on('connecting', () => {
+                    console.log(`Stream ${channelId}: Connecting...`);
+                });
+                
+                player.on('connected', () => {
+                    console.log(`Stream ${channelId}: Connected`);
+                    this.hideStatus();
+                    this.overlay.style.display = 'block';
+                });
+                
+                player.on('error', (error) => {
+                    console.error(`Stream ${channelId}: Error:`, error);
+                    this.showStatus('error', `Stream ${channelId} error`);
+                });
+                
+                player.on('disconnected', () => {
+                    console.log(`Stream ${channelId}: Disconnected`);
+                    this.showStatus('error', `Stream ${channelId} disconnected`);
+                });
+                
+                // Also listen to video element events as fallback
+                videoElement.addEventListener('canplay', () => {
+                    console.log(`Video ${channelId} can play`);
+                    this.hideStatus();
+                    this.overlay.style.display = 'block';
+                });
+                
+                videoElement.addEventListener('playing', () => {
+                    console.log(`Video ${channelId} playing`);
+                    this.hideStatus();
+                    this.overlay.style.display = 'block';
+                });
+                
+                videoElement.addEventListener('error', (error) => {
+                    console.error(`Video ${channelId} error:`, error);
+                    this.showStatus('error', `Video ${channelId} error`);
+                });
+                
+                // Start playback
+                await player.load(new URL(whepPlaybackUrl));
+            }
+            
             async getStreamInfo(channelId) {
                 const whepChannelEndpoint = this.whepGatewayUrl + '/whep/channel';
                 
@@ -392,14 +578,23 @@
             }
             
             clearStream() {
-                console.log('Clearing stream');
+                console.log('Clearing stream(s)');
 
                 if (this.currentPlayer) {
                     this.currentPlayer.destroy();
                     this.currentPlayer = null;
                 }
+                
+                if (this.currentPlayer2) {
+                    this.currentPlayer2.destroy();
+                    this.currentPlayer2 = null;
+                }
+
+                // Reset layout
+                this.videoContainer.classList.remove('side-by-side');
 
                 this.currentChannelId = null;
+                this.currentChannelIds = [];
                 this.overlay.style.display = 'none';
                 this.status.style.display = 'none';
                 this.showQRCode();
@@ -492,6 +687,9 @@
             cleanup() {
                 if (this.currentPlayer) {
                     this.currentPlayer.destroy();
+                }
+                if (this.currentPlayer2) {
+                    this.currentPlayer2.destroy();
                 }
             }
         }
