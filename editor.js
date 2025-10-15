@@ -24,6 +24,7 @@ class LiveBroadcastEditor {
         this.isConnected = false;
         this.selectedChannelId = null;
         this.selectedChannels = new Set(); // Track multiple selected channels
+        this.onAirChannels = []; // Track channels currently on air (for side-by-side)
         this.allStreams = [];
         this.currentPage = 0;
         this.gridColumns = 4;
@@ -765,6 +766,7 @@ class LiveBroadcastEditor {
             }
             
             this.selectedChannelId = null;
+            this.onAirChannels = []; // Clear on-air state
             this.sendWebSocketMessage({
                 type: 'deselectChannel'
             });
@@ -780,6 +782,9 @@ class LiveBroadcastEditor {
                 });
                 this.pendingSelection = null;
             }
+            
+            // Update button visibility
+            this.updateTakeButtonVisibility();
             
             return;
         }
@@ -862,23 +867,45 @@ class LiveBroadcastEditor {
         });
         
         console.log(`Stream ${streamId} is now ON AIR`);
+        
+        // Update on-air state for single selection
+        this.onAirChannels = [streamId];
+        this.updateTakeButtonVisibility();
     }
     
     updateTakeButtonVisibility() {
         if (!this.takeBtn) return;
         
-        if (this.selectedChannels.size === 2) {
+        // Check if we have participants currently on air (single or multiple)
+        if (this.onAirChannels.length >= 1 && this.selectedChannels.size === 0) {
+            this.takeBtn.style.display = 'inline-block';
+            const participantText = this.onAirChannels.length > 1 ? 'Participants' : 'Participant';
+            this.takeBtn.textContent = `Untake ${participantText} (Go Off Air)`;
+            this.takeBtn.classList.remove('btn-primary');
+            this.takeBtn.classList.add('btn-secondary', 'untake-btn');
+        } else if (this.selectedChannels.size === 2) {
             this.takeBtn.style.display = 'inline-block';
             this.takeBtn.textContent = 'Take Selected (Side-by-Side)';
+            this.takeBtn.classList.remove('btn-secondary', 'untake-btn');
+            this.takeBtn.classList.add('btn-primary');
         } else if (this.selectedChannels.size === 1) {
             this.takeBtn.style.display = 'inline-block';
             this.takeBtn.textContent = 'Take Selected (Single)';
+            this.takeBtn.classList.remove('btn-secondary', 'untake-btn');
+            this.takeBtn.classList.add('btn-primary');
         } else {
             this.takeBtn.style.display = 'none';
+            this.takeBtn.classList.remove('btn-secondary', 'untake-btn');
         }
     }
     
     takeSelectedParticipants() {
+        // Check if we're in untake mode (participants currently on air)
+        if (this.onAirChannels.length >= 1 && this.selectedChannels.size === 0) {
+            this.untakeParticipants();
+            return;
+        }
+        
         if (this.selectedChannels.size === 0) {
             this.showError('No participants selected');
             return;
@@ -982,6 +1009,49 @@ class LiveBroadcastEditor {
         this.updateTakeButtonVisibility();
         
         console.log(`Streams ${channelIds.join(', ')} are now ON AIR (side-by-side)`);
+        
+        // Update on-air state
+        this.onAirChannels = channelIds;
+        this.updateTakeButtonVisibility();
+    }
+    
+    untakeParticipants() {
+        console.log(`Untaking participants: ${this.onAirChannels.join(', ')}`);
+        
+        // Cancel any existing countdown
+        if (this.countdownTimer) {
+            clearTimeout(this.countdownTimer);
+            this.countdownTimer = null;
+        }
+        if (this.pendingSelection || this.pendingMultiSelection) {
+            this.sendWebSocketMessage({
+                type: 'cancelCountdown'
+            });
+            this.pendingSelection = null;
+            this.pendingMultiSelection = null;
+        }
+        
+        // Clear all on-air participants
+        this.onAirChannels.forEach(channelId => {
+            const tile = document.getElementById(`tile-${channelId}`);
+            if (tile) {
+                tile.classList.remove('selected');
+            }
+        });
+        
+        // Send WebSocket message to untake all participants
+        this.sendWebSocketMessage({
+            type: 'deselectChannel'
+        });
+        
+        // Clear on-air state
+        this.onAirChannels = [];
+        this.selectedChannelId = null;
+        
+        // Update button visibility
+        this.updateTakeButtonVisibility();
+        
+        console.log('All participants taken off air');
     }
     
     initializeWebSocket() {
@@ -1001,18 +1071,24 @@ class LiveBroadcastEditor {
                 switch (data.type) {
                     case 'channelSelected':
                         this.selectedChannelId = data.channelId;
+                        this.onAirChannels = data.channelId ? [data.channelId] : [];
                         this.updateStreamTiles();
+                        this.updateTakeButtonVisibility();
                         break;
                         
                     case 'multipleChannelsSelected':
                         // Server confirmed multi-selection
                         this.selectedChannelId = null;
+                        this.onAirChannels = data.channelIds || [];
                         this.updateStreamTiles();
+                        this.updateTakeButtonVisibility();
                         break;
                         
                     case 'channelDeselected':
                         this.selectedChannelId = null;
+                        this.onAirChannels = [];
                         this.updateStreamTiles();
+                        this.updateTakeButtonVisibility();
                         break;
                         
                     case 'participantJoined':
