@@ -56,11 +56,26 @@ A comprehensive web application for live broadcasting that enables participants 
 - 🔔 Audio notifications for participant joins (configurable)
 - 📋 Comprehensive participant instructions display
 
+### 👥 **Side-by-Side Broadcasting** *(NEW)*
+- 🎭 **Multi-Participant Selection**: Shift+click to select up to 2 participants
+- 📺 **Dual Stream Output**: Side-by-side video layout for paired broadcasting
+- 🔄 **Smart Take Button**: Context-aware "Take Selected" with single/dual mode
+- 🔴 **Untake Toggle**: Easy on/off air control with visual feedback
+- ⚡ **Countdown Support**: Optional countdown for both single and dual selections
+
+### 💬 **Participant-to-Participant Communication** *(NEW)*
+- 🎥 **Real-time Video Chat**: Selected participants see each other's live feeds
+- 🖼️ **Smart Layout**: Partner video in main area, self-preview in corner
+- 🔄 **Automatic Pairing**: Instant communication when editor selects participants
+- 🎯 **Visual Indicators**: Clear "Partner" and "You" labels for identification
+- 📺 **Seamless Integration**: Works alongside side-by-side broadcast output
+
 ### 🎮 **OBS Studio Integration**
 - 🖥️ **Screen/Window Capture**: Capture participant video feed for broadcast output
+- 👥 **Side-by-Side Output**: Dual participant layout with 50/50 split screen *(NEW)*
 - 🌐 **Browser Source**: QR code display (`/qr`) for easy participant joining
 - 💬 **Messages Feed**: Live messages overlay (`/feed`) for audience interaction
-- 🔄 Automatic stream switching based on editor selection
+- 🔄 Automatic stream switching based on editor selection (single or dual)
 - 📡 Real-time updates via WebSocket
 - ⚫ Black background video output with QR code when no participants selected
 
@@ -146,6 +161,8 @@ Perfect for testing, demos, or production use without the complexity of setting 
 2. **Editor Interface:**
    - Visit `http://localhost:3000/editor`
    - **Stream Management:** View numbered mosaic, use keys `1-9` (and `0` for 10th stream)
+   - **Side-by-Side Broadcasting:** Hold Shift and click to select 2 participants, then click "Take Selected (Side-by-Side)"
+   - **Untake Control:** Click "Untake Participants (Go Off Air)" to remove participants from broadcast
    - **Message Moderation:** Review, approve, or reject participant messages
    - **Settings:** Configure audio notifications and other preferences
    - Selected stream is synchronized across all devices
