@@ -63,6 +63,29 @@ app.get('/source', (req, res) => {
     res.sendFile(path.join(__dirname, 'source.html'));
 });
 
+// Per-participant individually-addressable output (issue #9).
+// Pinned single-participant render page — resolves participantId -> current channelId
+// and plays that one WHEP channel. The legacy /source mosaic above is unchanged.
+app.get('/source/:participantId', (req, res) => {
+    res.sendFile(path.join(__dirname, 'source-single.html'));
+});
+
+// Registry resolution API (issue #9). World-readable: returns anonymized "Guest N"
+// display labels, never the real join-form names (privacy default).
+app.get('/api/participants', (req, res) => {
+    res.json({
+        participants: Array.from(participants.values()).map(participantView)
+    });
+});
+
+app.get('/api/participants/:participantId', (req, res) => {
+    const entry = participants.get(req.params.participantId);
+    if (!entry) {
+        return res.status(404).json({ error: 'unknown participant' });
+    }
+    res.json(participantView(entry));
+});
+
 app.get('/qr', (req, res) => {
     res.sendFile(path.join(__dirname, 'qr.html'));
 });
@@ -77,6 +100,76 @@ let selectedChannelId = null;
 let selectedChannelIds = []; // Track multiple selected channels for side-by-side
 const connectedClients = new Set();
 const participantChannels = new Set(); // Track active participant channels
+
+// Per-participant registry (issue #9): maps a stable, client-minted participantId to the
+// participant's CURRENT ephemeral gateway channelId, so a pinned /source/:participantId output
+// survives reconnects (which mint a new channelId). Purely additive to participantChannels.
+// entry shape: { participantId, name, guestLabel, channelId, online, joinedAt, lastSeen }
+const participants = new Map();
+let guestCounter = 0;
+const PARTICIPANT_TTL_MS = 30 * 60 * 1000; // GC offline entries after 30 min
+
+// World-readable projection: anonymized "Guest N" label only, never the real join-form name
+// (privacy default), and channelId only while the participant is online.
+function participantView(entry) {
+    return {
+        participantId: entry.participantId,
+        name: entry.guestLabel,
+        channelId: entry.online ? entry.channelId : null,
+        online: entry.online,
+        joinedAt: entry.joinedAt,
+        lastSeen: entry.lastSeen
+    };
+}
+
+function broadcast(obj) {
+    const msg = JSON.stringify(obj);
+    connectedClients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+            client.send(msg);
+        }
+    });
+}
+
+function broadcastParticipantRegistry() {
+    broadcast({
+        type: 'participantRegistry',
+        participants: Array.from(participants.values()).map(participantView)
+    });
+}
+
+// Mark a participant offline (on explicit leave or WS close) and notify pinned outputs.
+function markParticipantOffline(participantId) {
+    const entry = participants.get(participantId);
+    if (!entry || !entry.online) {
+        return;
+    }
+    entry.online = false;
+    entry.channelId = null;
+    entry.lastSeen = new Date().toISOString();
+    broadcast({
+        type: 'participantChannelChanged',
+        participantId: entry.participantId,
+        channelId: null,
+        online: false
+    });
+    broadcastParticipantRegistry();
+}
+
+// Garbage-collect stale offline entries so ids/labels don't accumulate forever.
+setInterval(() => {
+    const now = Date.now();
+    let changed = false;
+    for (const [id, entry] of participants) {
+        if (!entry.online && now - new Date(entry.lastSeen).getTime() > PARTICIPANT_TTL_MS) {
+            participants.delete(id);
+            changed = true;
+        }
+    }
+    if (changed) {
+        broadcastParticipantRegistry();
+    }
+}, 60 * 1000).unref();
 
 // Message queue for participant questions/comments
 const messageQueue = [];
@@ -100,7 +193,14 @@ wss.on('connection', (ws) => {
             channelIds: selectedChannelIds
         }));
     }
-    
+
+    // Send current participant registry to the new client (issue #9) — pinned outputs use
+    // this as their initial state to resolve participantId -> channelId on WS open.
+    ws.send(JSON.stringify({
+        type: 'participantRegistry',
+        participants: Array.from(participants.values()).map(participantView)
+    }));
+
     ws.on('message', (message) => {
         try {
             const data = JSON.parse(message);
@@ -210,8 +310,55 @@ wss.on('connection', (ws) => {
                             }
                         });
                     }
+
+                    // Per-participant registry upsert (issue #9). Keyed by the stable,
+                    // client-minted participantId; channelId is the current gateway channel.
+                    if (data.participantId) {
+                        const now = new Date().toISOString();
+                        let entry = participants.get(data.participantId);
+                        const prevChannelId = entry ? entry.channelId : null;
+                        const wasOnline = entry ? entry.online : false;
+
+                        if (!entry) {
+                            entry = {
+                                participantId: data.participantId,
+                                name: typeof data.name === 'string' ? data.name : '',
+                                guestLabel: `Guest ${++guestCounter}`,
+                                channelId: data.channelId || null,
+                                online: !!data.channelId,
+                                joinedAt: now,
+                                lastSeen: now
+                            };
+                            participants.set(data.participantId, entry);
+                        } else {
+                            if (typeof data.name === 'string' && data.name) {
+                                entry.name = data.name;
+                            }
+                            if (data.channelId) {
+                                entry.channelId = data.channelId;
+                                entry.online = true;
+                            }
+                            entry.lastSeen = now;
+                        }
+
+                        // Remember which participant this socket belongs to so a WS close
+                        // can mark them offline.
+                        ws._participantId = data.participantId;
+
+                        // Notify pinned /source/:participantId outputs when the underlying
+                        // channel changes (reconnect mints a new channelId) or comes online.
+                        if (entry.online && (entry.channelId !== prevChannelId || !wasOnline)) {
+                            broadcast({
+                                type: 'participantChannelChanged',
+                                participantId: entry.participantId,
+                                channelId: entry.channelId,
+                                online: true
+                            });
+                        }
+                        broadcastParticipantRegistry();
+                    }
                     break;
-                    
+
                 case 'participantLeave':
                     if (data.channelId) {
                         console.log(`Participant left: ${data.channelId}`);
@@ -243,8 +390,14 @@ wss.on('connection', (ws) => {
                             });
                         }
                     }
+
+                    // Registry (issue #9): keep the entry (id/label survive a reconnect) but
+                    // mark offline and clear the channel; notify pinned outputs.
+                    if (data.participantId) {
+                        markParticipantOffline(data.participantId);
+                    }
                     break;
-                    
+
                 case 'startCountdown':
                     console.log(`Starting countdown for channel: ${data.channelId}`);
                     
@@ -454,6 +607,11 @@ wss.on('connection', (ws) => {
     ws.on('close', () => {
         console.log('WebSocket connection closed');
         connectedClients.delete(ws);
+        // If this socket was a participant, mark them offline so pinned outputs
+        // stop trying to play a dead channel (issue #9).
+        if (ws._participantId) {
+            markParticipantOffline(ws._participantId);
+        }
     });
     
     ws.on('error', (error) => {
@@ -466,7 +624,9 @@ server.listen(port, () => {
     console.log(`Join Live app listening at http://localhost:${port}`);
     console.log(`Participant view: http://localhost:${port}/join`);
     console.log(`Editor view: http://localhost:${port}/editor`);
-    console.log(`OBS Browser Source: http://localhost:${port}/source`);
+    console.log(`OBS Browser Source (mosaic): http://localhost:${port}/source`);
+    console.log(`OBS Browser Source (per participant): http://localhost:${port}/source/:participantId`);
+    console.log(`Participant registry API: http://localhost:${port}/api/participants`);
     console.log(`Messages Feed (OBS): http://localhost:${port}/feed`);
     console.log(`QR Code Display: http://localhost:${port}/qr`);
     console.log('');
