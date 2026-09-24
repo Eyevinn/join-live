@@ -238,7 +238,12 @@ class LiveBroadcastEditor {
     async fetchAvailableStreams() {
         const headers = {};
         if (this.whepAuthKey) {
-            headers['Authorization'] = `Bearer ${this.whepAuthKey}`;
+            // The SMB WHIP/WHEP bridge expects the auth key as the raw Authorization
+            // header value (this is how @eyevinn/whip-web-client sends opts.authkey and
+            // how app.js getStreamInfo() queries the same /whep/channel endpoint).
+            // Prefixing it with "Bearer " makes the gateway reject the request with
+            // 401 Unauthorized, leaving the editor with an empty stream list (#12).
+            headers['Authorization'] = this.whepAuthKey;
         }
         
         const response = await fetch(this.whepChannelEndpoint, {
