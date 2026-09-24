@@ -156,7 +156,8 @@ Perfect for testing, demos, or production use without the complexity of setting 
 
 - **Participant View** (`/join`): Camera access, live streaming, and messaging
 - **Editor View** (`/editor`): Stream management, message moderation, and broadcast controls
-- **Video Output** (`/source`): Clean video output for OBS screen capture
+- **Video Output** (`/source`): Editor-driven single/side-by-side (mosaic) output for OBS screen capture
+- **Per-Participant Output** (`/source/:participantId`): One clean, individually-addressable output per participant for use as its own OBS Browser Source (see below)
 - **QR Code Display** (`/qr`): QR code for participant joining, use as OBS Browser Source
 - **Messages Feed** (`/feed`): Live messages overlay for OBS Browser Source
 
@@ -191,6 +192,30 @@ Perfect for testing, demos, or production use without the complexity of setting 
    **For Messages Feed:**
    - Add `http://localhost:3000/feed` as **Browser Source** in OBS
    - Displays approved messages as a live overlay for audience interaction
+
+## Per-Participant Individual Outputs
+
+In addition to the editor-driven `/source` mosaic, each participant can be taken as its own
+**individually-addressable** output — one clean feed carrying that participant's own video and
+audio only — for switching, cropping, overlaying, and audio-mixing each guest independently in
+your vision mixer.
+
+- **URL:** add `http://localhost:3000/source/:participantId` as a separate **Browser Source** in
+  OBS, one per guest.
+- **Stable across reconnects:** `participantId` is a stable id the participant's browser mints
+  and persists (in `localStorage`), mapped server-side to the participant's *current* ephemeral
+  gateway channel. If a guest drops and rejoins (which mints a new channel), the output
+  re-subscribes automatically — no OBS changes needed.
+- **Resolution API:** `GET /api/participants` lists active participants and
+  `GET /api/participants/:participantId` returns one. These world-readable endpoints return
+  anonymized `Guest N` display labels (real join-form names are never exposed here).
+- **No re-compositing:** each output is a direct WHEP subscription to that one participant's SFU
+  broadcaster channel, so audio isolation is a property of the topology — no server-side mixer.
+- **Query params:**
+  - `?audio=0` — mute this output (video only). Default: audio on.
+  - `?overlay=1` — show a built-in name/label overlay. Default: clean feed (no overlay).
+- **Supported concurrency (v1):** **8** simultaneous per-participant outputs.
+- The legacy `/source` mosaic is unchanged and remains available.
 
 ## Messaging System
 

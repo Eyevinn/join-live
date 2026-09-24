@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OBS Browser Source - Single Participant</title>
+    <!--
+      Per-participant individually-addressable output (issue #9).
+
+      Served at /source/:participantId. Unlike /source (the editor-driven mosaic), this page is
+      PINNED to one participant: it resolves participantId -> current channelId via
+      /api/participants/:participantId and plays that single WHEP channel directly (no
+      re-compositing). It does NOT react to editor selectChannel events. When the participant
+      reconnects and the gateway mints a new channelId, the server pushes participantChannelChanged
+      and this page re-subscribes automatically — the producer never touches OBS.
+
+      Query params:
+        ?audio=0   mute this output (video only). Default: audio on.
+        ?overlay=1 show a built-in name/label overlay. Default: clean feed (no overlay).
+    -->
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000000;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+
+        .video-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            background: #000000;
+        }
+
+        .stream-video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #000000;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+            z-index: 10;
+        }
+
+        .status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            color: #ff6b6b;
+        }
+
+        .waiting {
+            color: #74c0fc;
+        }
+
+        .unmute-prompt {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 20;
+        }
+
+        .unmute-btn {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border: 2px solid #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .unmute-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+    <div id="videoContainer" class="video-container">
+        <video id="streamVideo" class="stream-video" autoplay playsinline muted></video>
+        <div id="overlay" class="overlay"></div>
+        <div id="unmutePrompt" class="unmute-prompt" style="display: none;">
+            <button id="unmuteBtn" class="unmute-btn">🔊 Click to Enable Audio</button>
+        </div>
+        <div id="status" class="status waiting"></div>
+    </div>
+
+    <script src="config.js"></script>
+    <script type="module">
+        class SingleParticipantSource {
+            constructor() {
+                this.currentPlayer = null;
+                this.currentChannelId = null;
+
+                // The pinned participant is taken from the URL path: /source/:participantId
+                const parts = window.location.pathname.split('/').filter(Boolean);
+                this.participantId = decodeURIComponent(parts[parts.length - 1] || '');
+
+                // Query options: audio on by default, overlay off (clean feed) by default.
+                const params = new URLSearchParams(window.location.search);
+                this.audioRequested = params.get('audio') !== '0';
+                this.overlayEnabled = params.get('overlay') === '1';
+
+                this.videoElement = document.getElementById('streamVideo');
+                this.overlay = document.getElementById('overlay');
+                this.status = document.getElementById('status');
+                this.unmutePrompt = document.getElementById('unmutePrompt');
+                this.unmuteBtn = document.getElementById('unmuteBtn');
+                this.isAudioEnabled = false;
+                this.label = '';
+
+                this.loadConfiguration();
+                this.initializeAudioControl();
+                this.initializeWebSocket();
+
+                if (!this.participantId) {
+                    this.showStatus('error', 'No participant id in URL');
+                    return;
+                }
+
+                this.showStatus('waiting', 'Waiting for participant...');
+                // Resolve once immediately (in case the participant is already online before the
+                // WS registry snapshot arrives).
+                this.resolveAndPlay();
+            }
+
+            loadConfiguration() {
+                this.whepGatewayUrl = window.WHEP_GATEWAY_URL || window.WHIP_GATEWAY_URL || 'https://eyevinnlab-livevibe.eyevinn-wrtc-egress.auto.prod.osaas.io';
+                this.whepAuthKey = window.WHEP_AUTH_KEY || window.WHIP_AUTH_KEY || null;
+                console.log('Single-participant source - WHEP Gateway:', this.whepGatewayUrl, 'participantId:', this.participantId);
+            }
+
+            initializeWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}`;
+
+                this.ws = new WebSocket(wsUrl);
+
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                };
+
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+
+                        switch (data.type) {
+                            // Pinned outputs deliberately IGNORE editor selection events
+                            // (channelSelected / multipleChannelsSelected / channelDeselected).
+                            case 'participantRegistry':
+                                this.handleRegistry(data.participants || []);
+                                break;
+
+                            case 'participantChannelChanged':
+                                if (data.participantId === this.participantId) {
+                                    this.handleChannelChanged(data);
+                                }
+                                break;
+                        }
+                    } catch (error) {
+                        console.error('Error parsing WebSocket message:', error);
+                    }
+                };
+
+                this.ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    setTimeout(() => this.initializeWebSocket(), 3000);
+                };
+
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                };
+            }
+
+            handleRegistry(list) {
+                const view = list.find(p => p.participantId === this.participantId);
+                if (!view) {
+                    return;
+                }
+                this.label = view.name || '';
+                this.applyOverlayLabel();
+                if (view.online && view.channelId) {
+                    if (view.channelId !== this.currentChannelId) {
+                        this.switchToChannel(view.channelId);
+                    }
+                } else {
+                    this.clearStream(true);
+                }
+            }
+
+            handleChannelChanged(data) {
+                if (data.online && data.channelId) {
+                    if (data.channelId !== this.currentChannelId) {
+                        this.switchToChannel(data.channelId);
+                    }
+                } else {
+                    this.clearStream(true);
+                }
+            }
+
+            async resolveAndPlay() {
+                try {
+                    const response = await fetch(`/api/participants/${encodeURIComponent(this.participantId)}`);
+                    if (response.status === 404) {
+                        this.showStatus('waiting', 'Waiting for participant...');
+                        return;
+                    }
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+                    const view = await response.json();
+                    this.label = view.name || '';
+                    this.applyOverlayLabel();
+                    if (view.online && view.channelId) {
+                        this.switchToChannel(view.channelId);
+                    } else {
+                        this.showStatus('waiting', 'Participant offline');
+                    }
+                } catch (error) {
+                    console.error('Failed to resolve participant:', error);
+                    this.showStatus('error', 'Failed to resolve participant');
+                }
+            }
+
+            async switchToChannel(channelId) {
+                console.log(`Pinned output switching to channel: ${channelId}`);
+
+                if (this.currentPlayer) {
+                    this.currentPlayer.destroy();
+                    this.currentPlayer = null;
+                }
+
+                this.currentChannelId = channelId;
+                this.showStatus('loading', 'Loading stream...');
+
+                try {
+                    await this.loadStream(channelId);
+                } catch (error) {
+                    console.error('Failed to load stream:', error);
+                    this.showStatus('error', `Failed to load stream: ${error.message}`);
+                }
+            }
+
+            async loadStream(channelId) {
+                // Resolve the WHEP resource for this single channel exactly as /source does.
+                const streamInfo = await this.getStreamInfo(channelId);
+                if (!streamInfo) {
+                    throw new Error('Stream not found');
+                }
+
+                let whepPlaybackUrl;
+                if (streamInfo.resource) {
+                    whepPlaybackUrl = `${this.whepGatewayUrl}${streamInfo.resource}`;
+                } else {
+                    whepPlaybackUrl = `${this.whepGatewayUrl}/whep/${channelId}`;
+                }
+
+                console.log(`Loading stream from: ${whepPlaybackUrl}`);
+
+                if (!window.WebRTCPlayer) {
+                    await this.loadWebRTCPlayer();
+                }
+
+                this.currentPlayer = new window.WebRTCPlayer({
+                    video: this.videoElement,
+                    type: 'whep'
+                });
+
+                this.currentPlayer.on('connecting', () => {
+                    this.showStatus('loading', 'Connecting to stream...');
+                });
+
+                this.currentPlayer.on('connected', () => {
+                    this.hideStatus();
+                    this.applyOverlayLabel();
+                });
+
+                this.currentPlayer.on('error', (error) => {
+                    console.error('Stream error:', error);
+                    this.showStatus('error', 'Stream error');
+                });
+
+                this.currentPlayer.on('disconnected', () => {
+                    console.log('Stream disconnected');
+                });
+
+                this.videoElement.addEventListener('playing', () => {
+                    this.hideStatus();
+                    this.applyOverlayLabel();
+                });
+
+                await this.currentPlayer.load(new URL(whepPlaybackUrl));
+            }
+
+            async getStreamInfo(channelId) {
+                const whepChannelEndpoint = this.whepGatewayUrl + '/whep/channel';
+
+                const headers = {};
+                if (this.whepAuthKey) {
+                    headers['Authorization'] = `Bearer ${this.whepAuthKey}`;
+                }
+
+                try {
+                    const response = await fetch(whepChannelEndpoint, {
+                        method: 'GET',
+                        headers: headers
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+
+                    const data = await response.json();
+
+                    let streams = [];
+                    if (Array.isArray(data)) {
+                        streams = data;
+                    } else if (data.streams && Array.isArray(data.streams)) {
+                        streams = data.streams;
+                    } else if (data.channels && Array.isArray(data.channels)) {
+                        streams = data.channels;
+                    }
+
+                    return streams.find(stream =>
+                        (stream.channelId || stream.id || stream.streamId || stream.channel) === channelId
+                    );
+                } catch (error) {
+                    console.error('Failed to get stream info:', error);
+                    return null;
+                }
+            }
+
+            async loadWebRTCPlayer() {
+                const cdnUrls = [
+                    'https://cdn.skypack.dev/@eyevinn/webrtc-player',
+                    'https://unpkg.com/@eyevinn/webrtc-player/dist/main.js?module'
+                ];
+
+                for (const url of cdnUrls) {
+                    try {
+                        const module = await import(url);
+                        const WebRTCPlayer = module.WebRTCPlayer || module.default?.WebRTCPlayer;
+                        if (WebRTCPlayer) {
+                            window.WebRTCPlayer = WebRTCPlayer;
+                            return;
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to load from ${url}:`, error);
+                    }
+                }
+
+                throw new Error('Failed to load WebRTCPlayer from CDN');
+            }
+
+            clearStream(showWaiting) {
+                if (this.currentPlayer) {
+                    this.currentPlayer.destroy();
+                    this.currentPlayer = null;
+                }
+                this.currentChannelId = null;
+                this.overlay.style.display = 'none';
+                if (showWaiting) {
+                    this.showStatus('waiting', 'Participant offline');
+                }
+            }
+
+            applyOverlayLabel() {
+                if (this.overlayEnabled && this.currentChannelId) {
+                    this.overlay.textContent = this.label || 'Live';
+                    this.overlay.style.display = 'block';
+                } else {
+                    this.overlay.style.display = 'none';
+                }
+            }
+
+            showStatus(type, message) {
+                this.status.className = `status ${type}`;
+                this.status.innerHTML = type === 'loading'
+                    ? `<div class="spinner"></div><div>${message}</div>`
+                    : `<div>${message}</div>`;
+                this.status.style.display = 'block';
+            }
+
+            hideStatus() {
+                this.status.style.display = 'none';
+            }
+
+            initializeAudioControl() {
+                // Always start muted to satisfy browser autoplay policy. OBS's CEF browser source
+                // autoplays audio; in a regular browser the producer clicks once to enable it.
+                this.videoElement.muted = true;
+
+                if (!this.audioRequested) {
+                    // ?audio=0 — keep muted permanently, never prompt.
+                    return;
+                }
+
+                this.unmuteBtn.addEventListener('click', () => this.enableAudio());
+
+                const maybePrompt = () => {
+                    if (!this.isAudioEnabled) {
+                        this.showUnmutePrompt();
+                    }
+                };
+                this.videoElement.addEventListener('canplay', maybePrompt);
+                this.videoElement.addEventListener('playing', maybePrompt);
+            }
+
+            enableAudio() {
+                this.videoElement.muted = false;
+                this.isAudioEnabled = true;
+                this.hideUnmutePrompt();
+                if (this.videoElement.paused) {
+                    this.videoElement.play().catch(error => {
+                        console.error('Error playing video after unmute:', error);
+                    });
+                }
+            }
+
+            showUnmutePrompt() {
+                this.unmutePrompt.style.display = 'flex';
+            }
+
+            hideUnmutePrompt() {
+                this.unmutePrompt.style.display = 'none';
+            }
+
+            cleanup() {
+                if (this.currentPlayer) {
+                    this.currentPlayer.destroy();
+                }
+            }
+        }
+
+        let singleSource;
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                singleSource = new SingleParticipantSource();
+            });
+        } else {
+            singleSource = new SingleParticipantSource();
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (singleSource) {
+                singleSource.cleanup();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -22,6 +22,10 @@ class JoinLiveApp {
         this.whipClient = null;
         this.isStreaming = false;
         this.channelId = null;
+        // Stable, client-minted participant identity (issue #9). Persisted in localStorage so
+        // it survives a WHIP-session drop + rejoin (which mints a new ephemeral channelId),
+        // keeping any /source/:participantId output URL valid across reconnects.
+        this.participantId = this.getOrCreateParticipantId();
         this.partnerChannelId = null;
         this.partnerPlayer = null;
         this.isPartnered = false;
@@ -49,6 +53,37 @@ class JoinLiveApp {
     loadConfiguration() {
         this.whipGatewayUrl = window.WHIP_GATEWAY_URL || 'https://livevibe.osaas.io/whip';
         this.whipAuthKey = window.WHIP_AUTH_KEY || null;
+    }
+
+    getOrCreateParticipantId() {
+        const KEY = 'joinlive_participantId';
+        let id = null;
+        try {
+            id = localStorage.getItem(KEY);
+        } catch (e) {
+            // localStorage may be unavailable (private mode); fall back to a per-session id.
+        }
+        if (!id) {
+            const uuid = (window.crypto && window.crypto.randomUUID)
+                ? window.crypto.randomUUID()
+                : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+                    const r = (Math.random() * 16) | 0;
+                    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+                    return v.toString(16);
+                });
+            id = 'p_' + uuid;
+            try {
+                localStorage.setItem(KEY, id);
+            } catch (e) {
+                // ignore persistence failure
+            }
+        }
+        return id;
+    }
+
+    getParticipantName() {
+        const nameInput = document.getElementById('participantName');
+        return nameInput && nameInput.value ? nameInput.value.trim() : '';
     }
     
     initializeEventListeners() {
@@ -163,10 +198,14 @@ class JoinLiveApp {
                         this.channelId = match[1];
                         console.log('Channel ID:', this.channelId);
                         
-                        // Notify server that participant joined via WebSocket
+                        // Notify server that participant joined via WebSocket.
+                        // participantId is the stable key for per-participant outputs (issue #9);
+                        // name is best-effort (may be empty) and is never exposed publicly.
                         this.sendWebSocketMessage({
                             type: 'participantJoin',
-                            channelId: this.channelId
+                            channelId: this.channelId,
+                            participantId: this.participantId,
+                            name: this.getParticipantName()
                         });
                     }
                 }
@@ -195,10 +234,11 @@ class JoinLiveApp {
             if (this.channelId) {
                 this.sendWebSocketMessage({
                     type: 'participantLeave',
-                    channelId: this.channelId
+                    channelId: this.channelId,
+                    participantId: this.participantId
                 });
             }
-            
+
             if (this.whipClient) {
                 const resourceUrl = await this.whipClient.getResourceUrl();
                 // Due to bug in SDK destroy() does not work if getResourceUrl() is not including base url
@@ -402,10 +442,11 @@ class JoinLiveApp {
         if (this.channelId) {
             this.sendWebSocketMessage({
                 type: 'participantLeave',
-                channelId: this.channelId
+                channelId: this.channelId,
+                participantId: this.participantId
             });
         }
-        
+
         if (this.localStream) {
             this.localStream.getTracks().forEach(track => track.stop());
         }
