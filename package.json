@@ -40,5 +40,8 @@
   "bugs": {
     "url": "https://github.com/Eyevinn/join-live/issues"
   },
-  "homepage": "https://github.com/Eyevinn/join-live#readme"
+  "homepage": "https://github.com/Eyevinn/join-live#readme",
+  "engines": {
+    "node": "^22.23.4 || >=24.22.1"
+  }
 }
